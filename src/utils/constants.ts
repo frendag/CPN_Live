@@ -1,6 +1,6 @@
 // URL de base du backend CPN sur AlwaysData
 // Remplace par l'URL exacte de ton app AlwaysData
-export const API_BASE = 'https://cpnnatation.alwaysdata.net';
+export const API_BASE = 'https://cpn-analytics.alwaysdata.net';
 
 export const COLORS = {
   primary:    '#1e3a8a',
