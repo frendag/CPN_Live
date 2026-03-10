@@ -27,16 +27,8 @@
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/favicon.png",
-      "name": "CPN Compét Live",
-      "shortName": "CPN Live",
-      "description": "Résultats live Cergy Pontoise Natation",
-      "themeColor": "#1e3a8a",
-      "backgroundColor": "#f0f4f8"
+      "favicon": "./assets/favicon.png"
     },
-    "plugins": ["expo-router"],
-    "experiments": {
-      "typedRoutes": true
-    }
+    "plugins": ["expo-router"]
   }
 }
