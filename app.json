@@ -1,0 +1,42 @@
+{
+  "expo": {
+    "name": "CPN Compét Live",
+    "slug": "cpn-compet-live",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "cpncompet",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1e3a8a"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "fr.cpnnatation.competlive"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1e3a8a"
+      },
+      "package": "fr.cpnnatation.competlive"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/favicon.png",
+      "name": "CPN Compét Live",
+      "shortName": "CPN Live",
+      "description": "Résultats live Cergy Pontoise Natation",
+      "themeColor": "#1e3a8a",
+      "backgroundColor": "#f0f4f8"
+    },
+    "plugins": ["expo-router"],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
