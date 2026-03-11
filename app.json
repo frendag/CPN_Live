@@ -19,7 +19,7 @@
     "preview": {
       "distribution": "internal"
       }
-    }
+    },
     "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
