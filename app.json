@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "CPN Compét Live",
-    "slug": "cpn-compet-live",
+    "slug": "cpnlive",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
