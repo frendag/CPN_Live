@@ -2,3 +2,8 @@ node_modules
 .expo
 /android
 /ios
+credentials.json
+credentials/
+eas-archive/
+eas-prebuild/
+eas-prebuild.log
