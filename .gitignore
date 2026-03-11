@@ -7,3 +7,8 @@ ios
 *.log
 .env
 .env.*
+credentials.json
+credentials/
+eas-archive/
+eas-prebuild/
+eas-prebuild.log
