@@ -12,14 +12,6 @@
       "resizeMode": "contain",
       "backgroundColor": "#1e3a8a"
     },
-    "cli": {
-    "appVersionSource": "remote"
-    },
-    "build": {
-    "preview": {
-      "distribution": "internal"
-      }
-    },
     "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
