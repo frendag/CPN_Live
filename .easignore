@@ -1,9 +1,4 @@
 node_modules
 .expo
-dist
-web-build
-android
-ios
-*.log
-.env
-.env.*
+/android
+/ios
