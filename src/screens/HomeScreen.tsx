@@ -7,17 +7,18 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCompet } from '../hooks/useCompet';
 import { COLORS } from '../utils/constants';
-import { parseRangGeneral, ptsNum, isAbsence, formatTime } from '../utils/helpers';
+import { parseRangGeneral, isAbsence, formatTime } from '../utils/helpers';
 import { LiveBadge } from '../components/Atoms';
-import VueAthletes from '../components/VueAthletes';
-import VueEpreuves from '../components/VueEpreuves';
-import VuePodiums  from '../components/VuePodiums';
+import VueProgramme from '../components/VueProgramme';
+import VueAthletes  from '../components/VueAthletes';
+import VueEpreuves  from '../components/VueEpreuves';
+import VuePodiums   from '../components/VuePodiums';
 import { ViewMode } from '../utils/types';
 
 export default function HomeScreen() {
   const [cid, setCid]       = useState('');
   const [filter, setFilter] = useState('');
-  const [vue, setVue]       = useState<ViewMode>('athletes');
+  const [vue, setVue]       = useState<ViewMode>('programme');
   const { data, loading, error, lastRefresh, autoOn, countdown, load, refresh, startAuto } = useCompet();
 
   const handleLoad = () => { if (cid.trim()) load(cid.trim()); };
@@ -25,7 +26,9 @@ export default function HomeScreen() {
   const filteredRows = filter
     ? (data?.rows ?? []).filter(r =>
         r.athlete.toLowerCase().includes(filter.toLowerCase()) ||
-        r.epreuve.toLowerCase().includes(filter.toLowerCase()))
+        r.epreuve.toLowerCase().includes(filter.toLowerCase()) ||
+        (r.serie || '').toLowerCase().includes(filter.toLowerCase()) ||
+        (r.heure_passage || '').toLowerCase().includes(filter.toLowerCase()))
     : (data?.rows ?? []);
 
   const nbAth  = new Set((data?.rows ?? []).map(r => r.athlete)).size;
@@ -36,11 +39,13 @@ export default function HomeScreen() {
   }).length;
   const nbWait = (data?.rows ?? []).filter(r => !r.temps_result).length;
   const nbPerf = (data?.rows ?? []).filter(r => r.temps_result && !isAbsence(r.temps_result)).length;
+  const nbProg = (data?.rows ?? []).filter(r => r.rows?.length > 0 || r.heure_passage).length;
 
   const TABS: { k: ViewMode; lbl: string; n: number; hi?: boolean }[] = [
-    { k: 'athletes', lbl: '👤 Athlètes', n: nbAth },
-    { k: 'epreuves', lbl: '🏊 Épreuves', n: nbEp },
-    { k: 'podiums',  lbl: '🏆 Podiums',  n: nbPod, hi: nbPod > 0 },
+    { k: 'programme', lbl: '📋 Programme', n: (data?.rows ?? []).length },
+    { k: 'athletes',  lbl: '👤 Athlètes',  n: nbAth },
+    { k: 'epreuves',  lbl: '🏊 Épreuves',  n: nbEp },
+    { k: 'podiums',   lbl: '🏆 Podiums',   n: nbPod, hi: nbPod > 0 },
   ];
 
   return (
@@ -94,9 +99,9 @@ export default function HomeScreen() {
             {/* KPIs */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.kpiScroll}>
               {[
-                { lbl: 'Athlètes', v: nbAth,  c: COLORS.primaryLight },
-                { lbl: 'Perfs',    v: nbPerf,  c: COLORS.success },
-                { lbl: 'Podiums',  v: nbPod,   c: COLORS.warning },
+                { lbl: 'Athlètes',   v: nbAth,  c: COLORS.primaryLight },
+                { lbl: 'Perfs',      v: nbPerf,  c: COLORS.success },
+                { lbl: 'Podiums',    v: nbPod,   c: COLORS.warning },
                 ...(nbWait > 0 ? [{ lbl: 'En attente', v: nbWait, c: COLORS.subtle }] : []),
               ].map(k => (
                 <View key={k.lbl} style={styles.kpi}>
@@ -120,7 +125,7 @@ export default function HomeScreen() {
             <TextInput
               value={filter}
               onChangeText={setFilter}
-              placeholder="🔍 Filtrer nom ou épreuve…"
+              placeholder="🔍 Filtrer nom, épreuve, heure…"
               placeholderTextColor={COLORS.subtle}
               style={styles.filterInput}
             />
@@ -147,7 +152,7 @@ export default function HomeScreen() {
 
         {/* ── TABS ─────────────────────────────────────────────────────── */}
         {data && (
-          <View style={styles.tabs}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabsScroll} contentContainerStyle={styles.tabs}>
             {TABS.map(t => (
               <Pressable key={t.k} onPress={() => setVue(t.k)} style={[styles.tab, vue === t.k && styles.tabActive]}>
                 <Text style={[styles.tabText, vue === t.k && styles.tabTextActive]}>{t.lbl}</Text>
@@ -162,7 +167,7 @@ export default function HomeScreen() {
                 )}
               </Pressable>
             ))}
-          </View>
+          </ScrollView>
         )}
 
         {/* ── CONTENU ──────────────────────────────────────────────────── */}
@@ -200,9 +205,10 @@ export default function HomeScreen() {
 
         {data && !!data.rows?.length && (
           <View style={{ flex: 1 }}>
-            {vue === 'athletes' && <VueAthletes rows={filteredRows} />}
-            {vue === 'epreuves' && <VueEpreuves rows={filteredRows} />}
-            {vue === 'podiums'  && <VuePodiums  rows={filteredRows} />}
+            {vue === 'programme' && <VueProgramme rows={filteredRows} />}
+            {vue === 'athletes'  && <VueAthletes  rows={filteredRows} />}
+            {vue === 'epreuves'  && <VueEpreuves  rows={filteredRows} />}
+            {vue === 'podiums'   && <VuePodiums   rows={filteredRows} />}
           </View>
         )}
 
@@ -221,19 +227,16 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.primary },
 
-  // Topbar
   topbar: {
     backgroundColor: COLORS.primary,
-    paddingHorizontal: 16, paddingBottom: 14, paddingTop: 4,
-    gap: 10,
+    paddingHorizontal: 16, paddingBottom: 14, paddingTop: 4, gap: 10,
   },
   topTitle: { color: '#fff', fontSize: 17, fontWeight: '900', letterSpacing: 0.2 },
   topInputRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   inputWrap: {
     flex: 1, flexDirection: 'row', alignItems: 'center',
     backgroundColor: 'rgba(255,255,255,.14)', borderRadius: 8,
-    borderWidth: 1.5, borderColor: 'rgba(255,255,255,.25)',
-    overflow: 'hidden',
+    borderWidth: 1.5, borderColor: 'rgba(255,255,255,.25)', overflow: 'hidden',
   },
   inputLabel: { paddingHorizontal: 10, color: 'rgba(255,255,255,.55)', fontSize: 12, fontWeight: '700' },
   input: { flex: 1, color: '#fff', fontWeight: '800', fontSize: 15, paddingVertical: 9, paddingRight: 10 },
@@ -253,12 +256,10 @@ const styles = StyleSheet.create({
   },
   btnRefreshText: { fontSize: 16 },
 
-  // Compet header
   compHeader: {
     backgroundColor: COLORS.card, paddingHorizontal: 16, paddingVertical: 12,
     borderBottomWidth: 1, borderBottomColor: COLORS.border,
-    borderLeftWidth: 4, borderLeftColor: COLORS.primaryLight,
-    gap: 8,
+    borderLeftWidth: 4, borderLeftColor: COLORS.primaryLight, gap: 8,
   },
   compHeaderLeft: { gap: 3 },
   compTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
@@ -270,44 +271,36 @@ const styles = StyleSheet.create({
   kpiLbl: { fontSize: 9, color: COLORS.subtle, fontWeight: '700', textTransform: 'uppercase' },
   kpiTime: { fontSize: 13, fontWeight: '700', color: COLORS.muted },
 
-  // Toolbar
   toolbar: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     paddingHorizontal: 12, paddingVertical: 8,
-    backgroundColor: COLORS.bg,
-    borderBottomWidth: 1, borderBottomColor: COLORS.border,
+    backgroundColor: COLORS.bg, borderBottomWidth: 1, borderBottomColor: COLORS.border,
   },
   filterInput: {
     flex: 1, backgroundColor: COLORS.card, borderRadius: 9,
     borderWidth: 1.5, borderColor: COLORS.border,
-    paddingHorizontal: 13, paddingVertical: 8,
-    fontSize: 13, color: COLORS.navy,
+    paddingHorizontal: 13, paddingVertical: 8, fontSize: 13, color: COLORS.navy,
   },
   autoBtn: {
     paddingHorizontal: 12, paddingVertical: 8,
-    backgroundColor: COLORS.card, borderRadius: 9,
-    borderWidth: 1.5, borderColor: COLORS.border,
+    backgroundColor: COLORS.card, borderRadius: 9, borderWidth: 1.5, borderColor: COLORS.border,
   },
   autoBtnOn: { backgroundColor: '#f0fdf4', borderColor: '#86efac' },
   autoBtnText: { fontSize: 12, fontWeight: '700', color: COLORS.muted },
   autoBtnTextOn: { color: '#16a34a' },
   liveBtn: {
     paddingHorizontal: 11, paddingVertical: 8,
-    backgroundColor: COLORS.card, borderRadius: 9,
-    borderWidth: 1.5, borderColor: COLORS.border,
+    backgroundColor: COLORS.card, borderRadius: 9, borderWidth: 1.5, borderColor: COLORS.border,
   },
   liveBtnText: { fontSize: 12, fontWeight: '700', color: COLORS.primaryLight },
 
-  // Tabs
-  tabs: {
-    flexDirection: 'row', paddingHorizontal: 12, paddingVertical: 8,
-    gap: 6, backgroundColor: COLORS.bg,
-    borderBottomWidth: 1, borderBottomColor: COLORS.border,
-  },
+  // Tabs scrollable horizontalement pour loger les 4 onglets
+  tabsScroll: { flexGrow: 0, backgroundColor: COLORS.bg, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  tabs: { paddingHorizontal: 12, paddingVertical: 8, gap: 6 },
   tab: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
-    paddingVertical: 8, borderRadius: 9, borderWidth: 1.5, borderColor: COLORS.border,
-    backgroundColor: COLORS.card,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
+    paddingVertical: 8, paddingHorizontal: 12,
+    borderRadius: 9, borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: COLORS.card,
   },
   tabActive: {
     backgroundColor: COLORS.primaryLight, borderColor: 'transparent',
@@ -321,7 +314,6 @@ const styles = StyleSheet.create({
   tabBadgeHi: { backgroundColor: '#fef9c3' },
   tabBadgeText: { fontSize: 10, fontWeight: '800', color: COLORS.subtle },
 
-  // Empty / Error
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, backgroundColor: COLORS.bg },
   emptyIcon: { fontSize: 52, marginBottom: 14 },
   emptyTitle: { fontSize: 17, fontWeight: '700', color: COLORS.muted, textAlign: 'center' },
@@ -334,12 +326,9 @@ const styles = StyleSheet.create({
   errorText: { fontSize: 14, color: '#b91c1c', fontWeight: '700', textAlign: 'center' },
   retryBtn: { backgroundColor: '#dc2626', borderRadius: 8, paddingHorizontal: 20, paddingVertical: 8 },
   retryText: { color: '#fff', fontWeight: '700', fontSize: 13 },
-
-  // Partial warn
   partialWarn: {
     margin: 10, marginTop: 0, padding: 10,
-    backgroundColor: '#fff7ed', borderRadius: 9,
-    borderWidth: 1.5, borderColor: '#fed7aa',
+    backgroundColor: '#fff7ed', borderRadius: 9, borderWidth: 1.5, borderColor: '#fed7aa',
   },
   partialText: { fontSize: 12, color: '#c2410c', fontWeight: '700', textAlign: 'center' },
 });
