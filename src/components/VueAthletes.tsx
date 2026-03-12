@@ -1,9 +1,9 @@
 import React from 'react';
-import { View, Text, FlatList, StyleSheet, Pressable } from 'react-native';
+import { View, Text, FlatList, StyleSheet } from 'react-native';
 import { CompetRow } from '../utils/types';
 import { parseRangGeneral, ptsNum } from '../utils/helpers';
 import { COLORS } from '../utils/constants';
-import { Avatar, MedalBadge, NagePill, TempsDisplay, PtsBadge } from './Atoms';
+import { Avatar, MedalBadge, NagePill, TempsDisplay, PtsBadge, ProgBadge, TempsRef } from './Atoms';
 
 interface Props { rows: CompetRow[]; }
 
@@ -25,6 +25,8 @@ export default function VueAthletes({ rows }: Props) {
     }, null);
     const podium    = bestRang !== null && bestRang <= 3;
     const enAttente = perfs.filter(r => !r.temps_result).length;
+    const nbBetter  = perfs.filter(r => r.tendance === 'better').length;
+    const nbWorse   = perfs.filter(r => r.tendance === 'worse').length;
 
     return (
       <View style={[styles.card, podium && styles.cardPodium]}>
@@ -38,6 +40,17 @@ export default function VueAthletes({ rows }: Props) {
               {' · '}{perfs.length} épreuve{perfs.length > 1 ? 's' : ''}
               {enAttente > 0 ? ` · ${enAttente} en attente` : ''}
             </Text>
+            {/* Résumé progression */}
+            {(nbBetter > 0 || nbWorse > 0) && (
+              <View style={styles.progSummary}>
+                {nbBetter > 0 && (
+                  <Text style={styles.progSummaryBetter}>▼ {nbBetter} PR</Text>
+                )}
+                {nbWorse > 0 && (
+                  <Text style={styles.progSummaryWorse}>▲ {nbWorse} régr.</Text>
+                )}
+              </View>
+            )}
           </View>
           <View style={styles.headerKpis}>
             {totalPts > 0 && (
@@ -64,8 +77,18 @@ export default function VueAthletes({ rows }: Props) {
               <View key={i} style={[styles.perfRow, isPod && styles.perfRowPodium]}>
                 <NagePill ep={r.epreuve} />
                 {r.type_serie ? <Text style={styles.serie}>{r.type_serie}</Text> : null}
-                <TempsDisplay temps={r.temps_result} />
+
+                {/* Temps réf → temps réalisé */}
+                <View style={styles.tempsWrap}>
+                  {r.temps_ref ? (
+                    <Text style={styles.tempsRefSmall}>{r.temps_ref}</Text>
+                  ) : null}
+                  <TempsDisplay temps={r.temps_result} />
+                </View>
+
                 <View style={styles.perfRight}>
+                  {/* Indicateur progression */}
+                  <ProgBadge tendance={r.tendance} delta_sec={r.delta_sec} />
                   {pos !== null && (
                     <View style={styles.rangWrap}>
                       <MedalBadge pos={pos} />
@@ -97,8 +120,7 @@ const styles = StyleSheet.create({
   list: { padding: 14, paddingBottom: 40, gap: 10 },
   card: {
     backgroundColor: COLORS.card, borderRadius: 14,
-    borderWidth: 1.5, borderColor: COLORS.border,
-    overflow: 'hidden',
+    borderWidth: 1.5, borderColor: COLORS.border, overflow: 'hidden',
     shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, shadowOffset: { width: 0, height: 1 },
     elevation: 2,
   },
@@ -106,13 +128,15 @@ const styles = StyleSheet.create({
   cardHeader: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     padding: 13, backgroundColor: '#f8fafc',
-    borderBottomWidth: 1, borderBottomColor: COLORS.border,
-    flexWrap: 'wrap',
+    borderBottomWidth: 1, borderBottomColor: COLORS.border, flexWrap: 'wrap',
   },
   cardHeaderPodium: { backgroundColor: '#fffbeb' },
   headerInfo: { flex: 1, minWidth: 140 },
   athName: { fontWeight: '900', fontSize: 15, color: COLORS.navy },
   athMeta: { fontSize: 11.5, color: COLORS.subtle, marginTop: 2 },
+  progSummary: { flexDirection: 'row', gap: 8, marginTop: 4 },
+  progSummaryBetter: { fontSize: 11, fontWeight: '800', color: '#16a34a' },
+  progSummaryWorse:  { fontSize: 11, fontWeight: '800', color: '#dc2626' },
   headerKpis: { flexDirection: 'row', gap: 12, alignItems: 'center' },
   kpi: { alignItems: 'center', gap: 2 },
   kpiVal: { fontSize: 18, fontWeight: '900', color: COLORS.primaryLight },
@@ -125,6 +149,8 @@ const styles = StyleSheet.create({
   },
   perfRowPodium: { backgroundColor: '#fffbeb', borderColor: '#fde68a' },
   serie: { fontSize: 10.5, color: COLORS.subtle, fontStyle: 'italic' },
+  tempsWrap: { flexDirection: 'column', gap: 1 },
+  tempsRefSmall: { fontFamily: 'Courier', fontSize: 10.5, color: COLORS.subtle },
   perfRight: { marginLeft: 'auto', flexDirection: 'row', gap: 6, alignItems: 'center', flexWrap: 'wrap' },
   rangWrap: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   total: { fontSize: 10, color: COLORS.subtle },
