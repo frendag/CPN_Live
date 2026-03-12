@@ -37,3 +37,10 @@ export function isAbsence(temps: string): boolean {
 export function formatTime(d: Date): string {
   return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
+
+/** Formate un delta en secondes en "+0.34 s" ou "−0.34 s" */
+export function formatDelta(delta: number | null): string {
+  if (delta === null) return '—';
+  const abs = Math.abs(delta).toFixed(2);
+  return delta >= 0 ? `+${abs} s` : `\u2212${abs} s`;
+}

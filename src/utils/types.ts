@@ -3,11 +3,20 @@ export interface CompetRow {
   naissance:      string;
   epreuve:        string;
   type_serie:     string;
+  // ── Programme ──────────────────────────────────
+  temps_ref:      string;        // Meilleur temps perso historique ex: "01:02.45"
+  serie:          string;        // Numéro de série ex: "3"
+  plot:           string;        // Couloir ex: "4"
+  heure_passage:  string;        // Heure prévue ex: "10h42"
+  // ── Résultats ──────────────────────────────────
   temps_result:   string;
   classement_cpn: string;
-  rang_general:   string; // "5/42"
-  points:         string; // "612 pts"
+  rang_general:   string;        // "5/42"
+  points:         string;        // "612 pts"
   date:           string;
+  // ── Progression ────────────────────────────────
+  delta_sec:      number | null; // temps_result - temps_ref en secondes
+  tendance:       'better' | 'worse' | 'stable' | '';
 }
 
 export interface CompetData {
@@ -16,8 +25,8 @@ export interface CompetData {
   dates:       string;
   bassin:      string;
   has_partial: boolean;
-  rows:        CompetRow[];
+  rows:        CompetRow[]; // liste des lignes athlètes
   error?:      string;
 }
 
-export type ViewMode = 'athletes' | 'epreuves' | 'podiums';
+export type ViewMode = 'programme' | 'athletes' | 'epreuves' | 'podiums';
