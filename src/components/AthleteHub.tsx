@@ -6,6 +6,7 @@ import { useAthleteData } from '../hooks/useAthleteData';
 import { normalizeText } from '../utils/helpers';
 import { AthleteRankingResponse, AthleteSaisonRow, AthleteTopRow } from '../utils/types';
 import { Avatar, Divider, KpiCard, SectionCard, SectionHeader } from './Atoms';
+import AthleteCharts from './AthleteCharts';
 
 function fmt(v?: number | null) {
   if (typeof v !== 'number' || Number.isNaN(v)) return '—';
@@ -231,6 +232,15 @@ export default function AthleteHub() {
                 ))}
               </View>
             </CollapseSection>
+          ) : null}
+
+          {/* Graphiques évolution & suivi temps */}
+          {(athlete.evo?.length || athlete.evo_temps || athlete.freq?.length) ? (
+            <AthleteCharts
+              evo={athlete.evo as any}
+              evo_temps={athlete.evo_temps as any}
+              freq={athlete.freq as any}
+            />
           ) : null}
 
           {/* Rankings */}
