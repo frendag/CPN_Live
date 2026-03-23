@@ -13,8 +13,13 @@ export function initials(name: string): string {
   return name.split(' ').filter(Boolean).map((part) => part[0]).join('').slice(0, 2).toUpperCase() || 'CP';
 }
 
+// Dark-theme avatar palette (matches the new navy dark theme)
 export function avatarColor(name: string): string {
-  const palette = ['#2563eb', '#16a34a', '#7c3aed', '#dc2626', '#0891b2', '#d97706', '#0d9488', '#9333ea'];
+  const palette = [
+    '#1d6fa4', '#00c9a7', '#a35eea', '#ff6b6b',
+    '#ffa748', '#34c778', '#5ab4e8', '#ffd166',
+    '#0f766e', '#7c3aed', '#e05c5c', '#059669',
+  ];
   let hash = 0;
   for (const char of name) hash = (hash * 31 + char.charCodeAt(0)) % palette.length;
   return palette[hash];
@@ -87,9 +92,7 @@ export function isCompetitionLive(meta?: Partial<CompetitionMeta> | null): boole
   const start = parseFrDate(meta.date_debut);
   const end = parseFrDate(meta.date_fin);
   if (!start || !end) return false;
-  const startIso = start.toLocaleDateString('fr-CA');
-  const endIso = end.toLocaleDateString('fr-CA');
-  return startIso <= todayIso && todayIso <= endIso;
+  return start.toLocaleDateString('fr-CA') <= todayIso && todayIso <= end.toLocaleDateString('fr-CA');
 }
 
 export function parseFrDate(value?: string | null): Date | null {
@@ -108,10 +111,10 @@ export function getStatusTone(status: CompetitionStatus): { bg: string; text: st
 export function rankLabel(pos?: number | null, total?: number | null, fallback?: string | null): string {
   const n = pos ?? (fallback ? parseInt(String(fallback), 10) : NaN);
   if (!Number.isFinite(n)) return '—';
-  const totalLabel = total ? ` /${total}` : '';
-  if (n === 1) return `🥇 1er${totalLabel}`;
-  if (n === 2) return `🥈 2e${totalLabel}`;
-  if (n === 3) return `🥉 3e${totalLabel}`;
+  const totalLabel = total ? `/${total}` : '';
+  if (n === 1) return `1er${totalLabel}`;
+  if (n === 2) return `2e${totalLabel}`;
+  if (n === 3) return `3e${totalLabel}`;
   return `${n}e${totalLabel}`;
 }
 
@@ -119,69 +122,58 @@ export function rankTone(pos?: number | null) {
   if (pos === 1) return { bg: COLORS.rank1Bg, text: COLORS.rank1Text };
   if (pos === 2) return { bg: COLORS.rank2Bg, text: COLORS.rank2Text };
   if (pos === 3) return { bg: COLORS.rank3Bg, text: COLORS.rank3Text };
-  if ((pos ?? 999) <= 10) return { bg: COLORS.rankTopBg, text: COLORS.rankTopText };
+  if (pos !== null && pos !== undefined && pos <= 8) return { bg: COLORS.rankTopBg, text: COLORS.rankTopText };
   return { bg: COLORS.rankOtherBg, text: COLORS.rankOtherText };
 }
 
-export function plotColor(plot?: number | string | null): string {
-  const value = typeof plot === 'string' ? parseInt(plot, 10) : plot;
-  if (!value || value <= 0) return COLORS.muted;
-  return PLOT_COLORS[(value - 1) % PLOT_COLORS.length];
+export function plotColor(plot: number | string | null | undefined): string {
+  const n = parseInt(String(plot ?? '0'), 10);
+  return PLOT_COLORS[(n - 1) % PLOT_COLORS.length] || PLOT_COLORS[0];
 }
 
-export function groupByAthlete<T extends { athlete_nom: string; annee_naiss?: number | string | null; sexe?: string | null }>(rows: T[]): AthleteGroup<T>[] {
-  const map = new Map<string, AthleteGroup<T>>();
-  rows.forEach((row) => {
-    const key = `${row.athlete_nom || '—'}__${row.annee_naiss || ''}`;
-    if (!map.has(key)) {
-      map.set(key, {
-        athlete_nom: row.athlete_nom || '—',
-        annee_naiss: row.annee_naiss || '',
-        sexe: row.sexe || '',
-        lignes: [],
-      });
+export function groupByAthlete<T extends { athlete_nom: string; annee_naiss?: number | string | null; sexe?: string | null }>(
+  rows: T[],
+): AthleteGroup<T>[] {
+  const seen = new Map<string, AthleteGroup<T>>();
+  for (const row of rows) {
+    const key = `${row.athlete_nom}__${row.annee_naiss ?? ''}`;
+    if (!seen.has(key)) {
+      seen.set(key, { athlete_nom: row.athlete_nom, annee_naiss: row.annee_naiss, sexe: row.sexe, lignes: [] });
     }
-    const group = map.get(key)!;
-    if (!group.sexe && row.sexe) group.sexe = row.sexe;
-    group.lignes.push(row);
-  });
-  return Array.from(map.values()).sort((a, b) => a.athlete_nom.localeCompare(b.athlete_nom, 'fr', { sensitivity: 'base' }));
+    seen.get(key)!.lignes.push(row);
+  }
+  return Array.from(seen.values()).sort((a, b) => a.athlete_nom.localeCompare(b.athlete_nom, 'fr', { sensitivity: 'base' }));
 }
 
 export function sortProgrammeRows(rows: ProgrammeRow[]): ProgrammeRow[] {
   return [...rows].sort((a, b) => {
-    const ha = String(a.heure_depart || '99h99').replace('h', ':');
-    const hb = String(b.heure_depart || '99h99').replace('h', ':');
-    if (ha !== hb) return ha.localeCompare(hb);
-    const ea = baseEventLabel(a);
-    const eb = baseEventLabel(b);
-    if (ea !== eb) return ea.localeCompare(eb, 'fr', { sensitivity: 'base' });
+    const timeA = String(a.heure_depart || '99:99');
+    const timeB = String(b.heure_depart || '99:99');
+    if (timeA !== timeB) return timeA.localeCompare(timeB);
     return typeOrder(a.type_serie) - typeOrder(b.type_serie);
   });
 }
 
 export function sortResultRows(rows: ResultRow[]): ResultRow[] {
   return [...rows].sort((a, b) => {
-    const ea = baseEventLabel(a);
-    const eb = baseEventLabel(b);
-    if (ea !== eb) return ea.localeCompare(eb, 'fr', { sensitivity: 'base' });
+    const labelA = baseEventLabel(a);
+    const labelB = baseEventLabel(b);
+    if (labelA !== labelB) return labelA.localeCompare(labelB, 'fr', { sensitivity: 'base' });
     return typeOrder(a.type_serie) - typeOrder(b.type_serie);
   });
 }
 
 export function buildSeriesReference(rows: ResultRow[]): Map<string, { sec: number; txt: string }> {
   const map = new Map<string, { sec: number; txt: string }>();
-  rows.forEach((row) => {
-    const type = normalizeText(row.type_serie);
-    if (type.includes('finale') || type.includes('demi')) return;
-    const sec = Number.isFinite(Number(row.result_sec)) ? Number(row.result_sec) : toResultSec(row.temps_result);
-    if (!Number.isFinite(sec)) return;
-    const key = baseEventLabel(row);
-    const prev = map.get(key);
-    if (!prev || sec < prev.sec) {
-      map.set(key, { sec, txt: String(row.temps_result || '').trim() });
-    }
-  });
+  for (const row of rows) {
+    const low = normalizeText(row.type_serie);
+    if (!low.includes('serie') && !low.includes('série')) continue;
+    const label = baseEventLabel(row);
+    if (map.has(label)) continue;
+    const txt = String(row.temps_result || '').trim();
+    const sec = Number.isFinite(Number(row.result_sec)) ? Number(row.result_sec) : toResultSec(txt);
+    if (Number.isFinite(sec) && txt) map.set(label, { sec, txt });
+  }
   return map;
 }
 
@@ -200,22 +192,13 @@ export function getTrendMeta(row: ResultRow, seriesRefMap: Map<string, { sec: nu
 
   if (rawType.includes('finale') || rawType.includes('demi')) {
     const sr = seriesRefMap.get(baseEventLabel(row));
-    if (sr && Number.isFinite(sr.sec)) {
-      refSec = sr.sec;
-      refTxt = sr.txt;
-      source = 'serie';
-    }
+    if (sr && Number.isFinite(sr.sec)) { refSec = sr.sec; refTxt = sr.txt; source = 'serie'; }
   } else {
     const parsed = Number.isFinite(Number(row.temps_ref_sec)) ? Number(row.temps_ref_sec) : toResultSec(row.temps_ref);
-    if (Number.isFinite(parsed)) {
-      refSec = parsed;
-      refTxt = String(row.temps_ref || '').trim();
-      source = 'ref';
-    }
+    if (Number.isFinite(parsed)) { refSec = parsed; refTxt = String(row.temps_ref || '').trim(); source = 'ref'; }
   }
 
   if (!Number.isFinite(refSec)) return { tone: 'none', label: '—' };
-
   const delta = +(sec - refSec).toFixed(2);
   const abs = Math.abs(delta).toFixed(2).replace('.', ',');
   const detail = source === 'serie' ? `vs série ${refTxt}` : `vs réf. ${refTxt}`;
