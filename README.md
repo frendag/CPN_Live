@@ -1,18 +1,22 @@
 # CPN Compét Live 🏊
 
-Application mobile Expo / React Native alignée sur les nouvelles routes compétition **v2** du backend CPN.
+Application mobile Expo / React Native alignée sur les routes backend CPN.
 
-## Ce qui a été mis à jour
+## Ce qui est disponible
 
-- passage de l’ancien endpoint `/api/compet` vers :
+- onglet **Competition** branché sur :
   - `/api/compet_v2/list`
   - `/api/compet_v2/programme`
   - `/api/compet_v2/resultats`
-- sélection des compétitions directement depuis la liste configurée côté backend
+- onglet **Athlète** branché sur :
+  - `/api/athletes`
+  - `/api/athlete?nom=...`
+  - `/api/athlete_ranking?nom=...&idbas=25|50`
 - affichage **Programme** groupé par **Réunion → Athlète**
 - affichage **Résultats** groupé par **Athlète** avec distinction **Séries / Finale**
+- fiche **Athlète** avec recherche, KPIs, saison, top performances et classements FFN
 - filtres Réunion / Nage / Type / Recherche
-- auto-refresh live basé sur `next_refresh_sec` renvoyé par l’API
+- auto-refresh live basé sur `next_refresh_sec` renvoyé par l’API compétition
 
 ## Installation
 
@@ -28,14 +32,6 @@ L’URL du backend est définie dans `src/utils/constants.ts` :
 ```ts
 export const API_BASE = 'https://cpn-analytics.alwaysdata.net';
 ```
-
-## Endpoints backend attendus
-
-Le backend Flask doit exposer :
-
-- `GET /api/compet_v2/list`
-- `GET /api/compet_v2/programme?competition_id=<id>`
-- `GET /api/compet_v2/resultats?competition_id=<id>`
 
 ## Build
 
