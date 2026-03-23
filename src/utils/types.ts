@@ -1,3 +1,4 @@
+export type AppSection = 'competition' | 'athlete';
 export type CompetitionStatus = 'en_cours' | 'a_venir' | 'passee';
 export type CompetitionTab = 'programme' | 'resultats';
 export type ReunionFilter = number | '';
@@ -117,4 +118,126 @@ export interface TrendMeta {
   tone: 'better' | 'worse' | 'stable' | 'forfeit' | 'none';
   label: string;
   detail?: string;
+}
+
+export interface AthleteKpis {
+  total_perfs?: number;
+  moy_pts?: number;
+  max_pts?: number;
+  annee_naissance?: number | null;
+  date_naissance?: string;
+  specialite?: string;
+  best_temps?: string;
+  nb_nages?: number;
+  periode?: string;
+  nb_nat?: number;
+  nb_int?: number;
+  sexe?: string;
+  iuf?: string;
+}
+
+export interface AthleteEvolutionRow {
+  Annee: number;
+  moy: number;
+  maxi: number;
+  nb: number;
+  delta?: number;
+}
+
+export interface AthleteSaisonRow {
+  Epreuve: string;
+  Bassin: string;
+  Temps_N: string;
+  Sec_N?: number;
+  Temps_Conv_50?: string | null;
+  Pts_N: number;
+  Date_N?: string;
+  Competition_N?: string;
+  Lieu_N?: string;
+  Temps_Nm1?: string | null;
+  Sec_Nm1?: number | null;
+  Prog_pct?: number | null;
+  Prog_ann?: number | null;
+  Niveau?: string;
+  Next_niveau?: string;
+  Pct_to_next?: number | null;
+}
+
+export interface AthleteTopRow {
+  Epreuve: string;
+  Bassin: string;
+  Temps: string;
+  Pts?: number | null;
+  Date?: string;
+  Competition?: string;
+  Lieu?: string;
+}
+
+export interface AthleteBestRow {
+  Epreuve: string;
+  Bassin: string;
+  Temps: string;
+  Temps_2026?: string;
+  Date_2026?: string;
+  Pts?: number | null;
+  Date?: string;
+  Niveau?: string;
+}
+
+export interface AthleteWebconf {
+  serie?: string | null;
+  detail?: string;
+  nages_qualif?: string[];
+  perfs_nat_Nm1?: string[];
+  annee_Nm1?: number;
+  est_u13?: boolean;
+}
+
+export interface AthleteResponse {
+  nom: string;
+  kpis: AthleteKpis;
+  evo?: AthleteEvolutionRow[];
+  palmares?: Array<Record<string, unknown>>;
+  evo_temps?: Record<string, unknown>;
+  top5?: AthleteTopRow[];
+  by_comp?: Record<string, number>;
+  freq?: Array<Record<string, unknown>>;
+  meilleurs?: AthleteBestRow[];
+  annee_naissance?: number | null;
+  sexe?: string;
+  annee_qualif?: number;
+  mp_saison?: AthleteSaisonRow[];
+  annee_N?: number;
+  annee_Nm1?: number;
+  frac_saison?: number;
+  epreuves_annee_N?: Array<Record<string, unknown>>;
+  webconf_serie?: AthleteWebconf | null;
+  error?: string;
+}
+
+export interface AthletesListResponse {
+  athletes: string[];
+  nb?: number;
+  error?: string;
+}
+
+export interface AthleteRankingRow {
+  epreuve: string;
+  bassin: string;
+  ffn_url?: string;
+  temps?: string;
+  pts?: number | string | null;
+  rang_nat?: number | null;
+  rang_reg?: number | null;
+  rang_dept?: number | null;
+}
+
+export interface AthleteRankingResponse {
+  nom: string;
+  saison: string;
+  bassin: string;
+  idrch_id?: string | null;
+  idcat?: string | null;
+  rows: AthleteRankingRow[];
+  error?: string;
 }

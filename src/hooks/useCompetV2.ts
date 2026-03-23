@@ -1,24 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { API_BASE } from '../utils/constants';
+import { buildApiUrl, errorMessage, fetchJson } from '../utils/api';
 import { CompetitionSummary, CompetitionsListResponse, ProgrammeResponse, ResultatsResponse } from '../utils/types';
-
-async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { headers: { Accept: 'application/json' } });
-  const text = await res.text();
-  let json: any;
-  try {
-    json = JSON.parse(text);
-  } catch {
-    throw new Error('Réponse serveur invalide.');
-  }
-  if (!res.ok) {
-    throw new Error(json?.error || `Erreur HTTP ${res.status}`);
-  }
-  if (json?.error) {
-    throw new Error(json.error);
-  }
-  return json as T;
-}
 
 export function useCompetV2() {
   const [competitions, setCompetitions] = useState<CompetitionSummary[]>([]);
@@ -33,11 +15,11 @@ export function useCompetV2() {
   const loadCompetitions = useCallback(async () => {
     setLoadingList(true);
     try {
-      const payload = await fetchJson<CompetitionsListResponse>(`${API_BASE}/api/compet_v2/list`);
+      const payload = await fetchJson<CompetitionsListResponse>(buildApiUrl('/api/compet_v2/list'));
       setCompetitions(payload.competitions || []);
       setError(null);
-    } catch (e: any) {
-      setError(e?.message || 'Impossible de charger les compétitions.');
+    } catch (error: unknown) {
+      setError(errorMessage(error, 'Impossible de charger les compétitions.'));
     } finally {
       setLoadingList(false);
     }
@@ -52,15 +34,15 @@ export function useCompetV2() {
     }
     try {
       const [prog, res] = await Promise.all([
-        fetchJson<ProgrammeResponse>(`${API_BASE}/api/compet_v2/programme?competition_id=${competitionId}`),
-        fetchJson<ResultatsResponse>(`${API_BASE}/api/compet_v2/resultats?competition_id=${competitionId}`),
+        fetchJson<ProgrammeResponse>(buildApiUrl(`/api/compet_v2/programme?competition_id=${competitionId}`)),
+        fetchJson<ResultatsResponse>(buildApiUrl(`/api/compet_v2/resultats?competition_id=${competitionId}`)),
       ]);
       setProgramme(prog);
       setResultats(res);
       setLastRefresh(new Date());
       setError(null);
-    } catch (e: any) {
-      setError(e?.message || 'Impossible de charger la compétition.');
+    } catch (error: unknown) {
+      setError(errorMessage(error, 'Impossible de charger la compétition.'));
     } finally {
       setLoadingDetail(false);
     }
@@ -69,12 +51,12 @@ export function useCompetV2() {
   const refreshResultats = useCallback(async () => {
     if (!selectedCompetitionId) return;
     try {
-      const res = await fetchJson<ResultatsResponse>(`${API_BASE}/api/compet_v2/resultats?competition_id=${selectedCompetitionId}`);
+      const res = await fetchJson<ResultatsResponse>(buildApiUrl(`/api/compet_v2/resultats?competition_id=${selectedCompetitionId}`));
       setResultats(res);
       setLastRefresh(new Date());
       setError(null);
-    } catch (e: any) {
-      setError(e?.message || 'Impossible d’actualiser les résultats.');
+    } catch (error: unknown) {
+      setError(errorMessage(error, 'Impossible d’actualiser les résultats.'));
     }
   }, [selectedCompetitionId]);
 
