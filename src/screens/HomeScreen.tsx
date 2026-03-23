@@ -1,334 +1,495 @@
-import React, { useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, TextInput, Pressable, StyleSheet,
-  ActivityIndicator, ScrollView, KeyboardAvoidingView,
-  Platform, StatusBar, Linking,
+  ActivityIndicator,
+  Linking,
+  Pressable,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useCompet } from '../hooks/useCompet';
-import { COLORS } from '../utils/constants';
-import { parseRangGeneral, isAbsence, formatTime } from '../utils/helpers';
-import { LiveBadge } from '../components/Atoms';
+import { COLORS, NAGE_FILTERS, STATUS_LABELS, TYPE_FILTERS } from '../utils/constants';
+import { Avatar, LiveBadge } from '../components/Atoms';
 import VueProgramme from '../components/VueProgramme';
-import VueAthletes  from '../components/VueAthletes';
-import VueEpreuves  from '../components/VueEpreuves';
-import VuePodiums   from '../components/VuePodiums';
-import { ViewMode } from '../utils/types';
+import VueResultats from '../components/VueResultats';
+import { useCompetV2 } from '../hooks/useCompetV2';
+import {
+  filterProgrammeReunions,
+  filterResultRows,
+  formatClock,
+  formatCompetitionDates,
+  getStatusTone,
+  isCompetitionLive,
+  normalizeText,
+} from '../utils/helpers';
+import { CompetitionStatus, CompetitionTab, NageFilter, TypeFilter } from '../utils/types';
+
+const STATUS_ORDER: CompetitionStatus[] = ['en_cours', 'a_venir', 'passee'];
 
 export default function HomeScreen() {
-  const [cid, setCid]       = useState('');
-  const [filter, setFilter] = useState('');
-  const [vue, setVue]       = useState<ViewMode>('programme');
-  const { data, loading, error, lastRefresh, autoOn, countdown, load, refresh, startAuto } = useCompet();
+  const {
+    competitions,
+    selectedCompetition,
+    selectedCompetitionId,
+    programme,
+    resultats,
+    loadingList,
+    loadingDetail,
+    error,
+    lastRefresh,
+    loadCompetitions,
+    loadCompetition,
+    refreshResultats,
+  } = useCompetV2();
 
-  const handleLoad = () => { if (cid.trim()) load(cid.trim()); };
+  const [tab, setTab] = useState<CompetitionTab>('programme');
+  const [searchCompet, setSearchCompet] = useState('');
+  const [searchAthlete, setSearchAthlete] = useState('');
+  const [nageFilter, setNageFilter] = useState<NageFilter>('');
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('');
+  const [reunionFilter, setReunionFilter] = useState<number | ''>('');
+  const [autoLive, setAutoLive] = useState(true);
+  const [countdown, setCountdown] = useState<number | null>(null);
 
-  const filteredRows = filter
-    ? (data?.rows ?? []).filter(r =>
-        r.athlete.toLowerCase().includes(filter.toLowerCase()) ||
-        r.epreuve.toLowerCase().includes(filter.toLowerCase()) ||
-        (r.serie || '').toLowerCase().includes(filter.toLowerCase()) ||
-        (r.heure_passage || '').toLowerCase().includes(filter.toLowerCase()))
-    : (data?.rows ?? []);
+  const activeMeta = resultats?.competition || programme?.competition || null;
+  const activeCid = selectedCompetition?.cid || activeMeta?.cid || '';
 
-  const nbAth  = new Set((data?.rows ?? []).map(r => r.athlete)).size;
-  const nbEp   = new Set((data?.rows ?? []).map(r => r.epreuve)).size;
-  const nbPod  = (data?.rows ?? []).filter(r => {
-    const p = parseRangGeneral(r.rang_general).pos;
-    return p && p <= 3 && r.temps_result && !isAbsence(r.temps_result);
-  }).length;
-  const nbWait = (data?.rows ?? []).filter(r => !r.temps_result).length;
-  const nbPerf = (data?.rows ?? []).filter(r => r.temps_result && !isAbsence(r.temps_result)).length;
-  const nbProg = (data?.rows ?? []).filter(r => r.rows?.length > 0 || r.heure_passage).length;
+  useEffect(() => {
+    setReunionFilter('');
+    setSearchAthlete('');
+    setNageFilter('');
+    setTypeFilter('');
+    setTab('programme');
+  }, [selectedCompetitionId]);
 
-  const TABS: { k: ViewMode; lbl: string; n: number; hi?: boolean }[] = [
-    { k: 'programme', lbl: '📋 Programme', n: (data?.rows ?? []).length },
-    { k: 'athletes',  lbl: '👤 Athlètes',  n: nbAth },
-    { k: 'epreuves',  lbl: '🏊 Épreuves',  n: nbEp },
-    { k: 'podiums',   lbl: '🏆 Podiums',   n: nbPod, hi: nbPod > 0 },
-  ];
+  useEffect(() => {
+    setReunionFilter('');
+  }, [tab]);
+
+  useEffect(() => {
+    if (!autoLive || !resultats?.competition?.next_refresh_sec || !selectedCompetitionId || !isCompetitionLive(resultats.competition)) {
+      setCountdown(resultats?.competition?.next_refresh_sec ?? null);
+      return;
+    }
+    setCountdown(resultats.competition.next_refresh_sec);
+    const interval = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev === null) return null;
+        if (prev <= 1) {
+          refreshResultats();
+          return resultats.competition.next_refresh_sec ?? null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [autoLive, resultats, refreshResultats, selectedCompetitionId]);
+
+  const filteredCompetitions = useMemo(() => {
+    const q = normalizeText(searchCompet);
+    return competitions.filter((item) => {
+      if (!q) return true;
+      return [item.nom, item.lieu, item.cid, item.label_sidebar].some((value) => normalizeText(value).includes(q));
+    });
+  }, [competitions, searchCompet]);
+
+  const displayedReunions = tab === 'programme' ? (programme?.reunions || []) : (resultats?.reunions || []);
+
+  const programmeReunions = useMemo(
+    () => filterProgrammeReunions(programme?.reunions || [], reunionFilter, nageFilter, typeFilter, searchAthlete),
+    [programme, reunionFilter, nageFilter, typeFilter, searchAthlete],
+  );
+
+  const resultRows = useMemo(
+    () => filterResultRows(resultats?.reunions || [], reunionFilter, nageFilter, typeFilter, searchAthlete),
+    [resultats, reunionFilter, nageFilter, typeFilter, searchAthlete],
+  );
+
+  const resultAthletesCount = useMemo(() => new Set(resultRows.map((row) => `${row.athlete_nom}__${row.annee_naiss || ''}`)).size, [resultRows]);
+
+  const competitionCounts = useMemo(() => ({
+    programme: programme?.reunions.reduce((sum, reunion) => sum + reunion.lignes.length, 0) || 0,
+    resultats: resultats?.reunions.reduce((sum, reunion) => sum + reunion.lignes.length, 0) || 0,
+  }), [programme, resultats]);
+
+  const openLiveffn = () => {
+    if (!activeCid) return;
+    Linking.openURL(`https://www.liveffn.com/cgi-bin/resultats.php?competition=${activeCid}&langue=fra`);
+  };
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.primary} />
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-
-        {/* ── TOPBAR ──────────────────────────────────────────────────── */}
-        <View style={styles.topbar}>
+      <View style={styles.topbar}>
+        <View>
           <Text style={styles.topTitle}>🏊 CPN Compét Live</Text>
-          <View style={styles.topInputRow}>
-            <View style={styles.inputWrap}>
-              <Text style={styles.inputLabel}>ID</Text>
-              <TextInput
-                value={cid}
-                onChangeText={setCid}
-                onSubmitEditing={handleLoad}
-                placeholder="ex: 92073"
-                placeholderTextColor="rgba(255,255,255,.4)"
-                keyboardType="numeric"
-                style={styles.input}
-                returnKeyType="search"
-              />
+          <Text style={styles.topSubtitle}>Version mobile alignée sur l’onglet Competition v2</Text>
+        </View>
+        <Pressable onPress={loadCompetitions} style={styles.reloadBtn}>
+          <Text style={styles.reloadBtnText}>↻ Liste</Text>
+        </Pressable>
+      </View>
+
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Compétitions</Text>
+          <TextInput
+            value={searchCompet}
+            onChangeText={setSearchCompet}
+            placeholder="Rechercher une compétition, un lieu ou un CID…"
+            placeholderTextColor={COLORS.subtle}
+            style={styles.searchInput}
+          />
+
+          {loadingList && competitions.length === 0 ? (
+            <View style={styles.centerState}>
+              <ActivityIndicator color={COLORS.primaryLight} />
+              <Text style={styles.centerStateText}>Chargement des compétitions…</Text>
             </View>
-            <Pressable onPress={handleLoad} disabled={loading} style={[styles.btnLoad, loading && styles.btnDisabled]}>
-              {loading
-                ? <ActivityIndicator color="#fff" size="small" />
-                : <Text style={styles.btnText}>🔍 Charger</Text>}
-            </Pressable>
-            {data && (
-              <Pressable onPress={refresh} disabled={loading} style={styles.btnRefresh}>
-                <Text style={styles.btnRefreshText}>🔄</Text>
-              </Pressable>
-            )}
-          </View>
+          ) : null}
+
+          {STATUS_ORDER.map((status) => {
+            const items = filteredCompetitions.filter((item) => item.status === status);
+            if (!items.length) return null;
+            return (
+              <View key={status} style={styles.groupWrap}>
+                <Text style={styles.groupTitle}>{STATUS_LABELS[status]}</Text>
+                <View style={styles.competitionList}>
+                  {items.map((item) => {
+                    const selected = item.id === selectedCompetitionId;
+                    const tone = getStatusTone(item.status);
+                    return (
+                      <Pressable
+                        key={item.id}
+                        style={[styles.competitionCard, selected && styles.competitionCardActive]}
+                        onPress={() => loadCompetition(item.id, false)}
+                      >
+                        <View style={styles.competitionCardTop}>
+                          <View style={[styles.statusPill, { backgroundColor: tone.bg }]}> 
+                            <Text style={[styles.statusPillText, { color: tone.text }]}>{STATUS_LABELS[item.status]}</Text>
+                          </View>
+                          <Text style={styles.cidText}>#{item.cid}</Text>
+                        </View>
+                        <Text style={styles.competitionName} numberOfLines={2}>{item.nom}</Text>
+                        <Text style={styles.competitionMeta}>{[item.lieu, item.bassin, formatCompetitionDates(item)].filter(Boolean).join(' · ')}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            );
+          })}
         </View>
 
-        {/* ── EN-TÊTE COMPET ───────────────────────────────────────────── */}
-        {data && (
-          <View style={styles.compHeader}>
-            <View style={styles.compHeaderLeft}>
-              <View style={styles.compTitleRow}>
-                <Text style={styles.compTitle} numberOfLines={2}>{data.nom}</Text>
-                {data.has_partial && <LiveBadge />}
+        {selectedCompetition && activeMeta ? (
+          <View style={styles.section}>
+            <View style={styles.detailHeader}>
+              <View style={{ flex: 1, gap: 6 }}>
+                <Text style={styles.detailTitle}>{activeMeta.nom}</Text>
+                <Text style={styles.detailMeta}>{[activeMeta.lieu, activeMeta.bassin, formatCompetitionDates(activeMeta)].filter(Boolean).join(' · ')}</Text>
+                <Text style={styles.detailSub}>CID liveffn : {activeMeta.cid}</Text>
               </View>
-              <Text style={styles.compMeta}>
-                {[data.lieu, data.bassin].filter(Boolean).join('  ·  ')}
-              </Text>
+              {isCompetitionLive(activeMeta) ? <LiveBadge countdown={countdown} /> : null}
             </View>
 
-            {/* KPIs */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.kpiScroll}>
+            <View style={styles.kpiRow}>
+              <View style={styles.kpiCard}>
+                <Text style={styles.kpiValue}>{programme?.reunions.length || 0}</Text>
+                <Text style={styles.kpiLabel}>Réunions</Text>
+              </View>
+              <View style={styles.kpiCard}>
+                <Text style={styles.kpiValue}>{competitionCounts.programme}</Text>
+                <Text style={styles.kpiLabel}>Programme</Text>
+              </View>
+              <View style={styles.kpiCard}>
+                <Text style={styles.kpiValue}>{competitionCounts.resultats}</Text>
+                <Text style={styles.kpiLabel}>Résultats</Text>
+              </View>
+              <View style={styles.kpiCard}>
+                <Text style={styles.kpiValue}>{resultAthletesCount}</Text>
+                <Text style={styles.kpiLabel}>Athlètes</Text>
+              </View>
+            </View>
+
+            <View style={styles.actionsRow}>
+              <Pressable style={styles.primaryBtn} onPress={() => loadCompetition(selectedCompetition.id)}>
+                <Text style={styles.primaryBtnText}>{loadingDetail ? 'Chargement…' : '⟳ Recharger'}</Text>
+              </Pressable>
+              <Pressable style={[styles.secondaryBtn, autoLive && styles.secondaryBtnActive]} onPress={() => setAutoLive((prev) => !prev)}>
+                <Text style={[styles.secondaryBtnText, autoLive && styles.secondaryBtnTextActive]}>{autoLive ? '⚡ Auto ON' : '⚡ Auto OFF'}</Text>
+              </Pressable>
+              <Pressable style={styles.secondaryBtn} onPress={openLiveffn}>
+                <Text style={styles.secondaryBtnText}>liveffn ↗</Text>
+              </Pressable>
+            </View>
+
+            <View style={styles.tabRow}>
               {[
-                { lbl: 'Athlètes',   v: nbAth,  c: COLORS.primaryLight },
-                { lbl: 'Perfs',      v: nbPerf,  c: COLORS.success },
-                { lbl: 'Podiums',    v: nbPod,   c: COLORS.warning },
-                ...(nbWait > 0 ? [{ lbl: 'En attente', v: nbWait, c: COLORS.subtle }] : []),
-              ].map(k => (
-                <View key={k.lbl} style={styles.kpi}>
-                  <Text style={[styles.kpiVal, { color: k.c }]}>{k.v}</Text>
-                  <Text style={styles.kpiLbl}>{k.lbl}</Text>
-                </View>
-              ))}
-              {lastRefresh && (
-                <View style={styles.kpi}>
-                  <Text style={styles.kpiTime}>{formatTime(lastRefresh)}</Text>
-                  <Text style={styles.kpiLbl}>mis à jour</Text>
-                </View>
-              )}
-            </ScrollView>
-          </View>
-        )}
-
-        {/* ── BARRE FILTRES ────────────────────────────────────────────── */}
-        {data && (
-          <View style={styles.toolbar}>
-            <TextInput
-              value={filter}
-              onChangeText={setFilter}
-              placeholder="🔍 Filtrer nom, épreuve, heure…"
-              placeholderTextColor={COLORS.subtle}
-              style={styles.filterInput}
-            />
-            <Pressable
-              onPress={() => startAuto(!autoOn)}
-              style={[styles.autoBtn, autoOn && styles.autoBtnOn]}
-            >
-              <Text style={[styles.autoBtnText, autoOn && styles.autoBtnTextOn]}>
-                {autoOn ? `⚡ ${countdown}s` : '⚡ Auto'}
-              </Text>
-            </Pressable>
-            {data && (
-              <Pressable
-                onPress={() => Linking.openURL(
-                  `https://www.liveffn.com/cgi-bin/resultats.php?competition=${cid}&langue=fra`
-                )}
-                style={styles.liveBtn}
-              >
-                <Text style={styles.liveBtnText}>liveffn ↗</Text>
-              </Pressable>
-            )}
-          </View>
-        )}
-
-        {/* ── TABS ─────────────────────────────────────────────────────── */}
-        {data && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabsScroll} contentContainerStyle={styles.tabs}>
-            {TABS.map(t => (
-              <Pressable key={t.k} onPress={() => setVue(t.k)} style={[styles.tab, vue === t.k && styles.tabActive]}>
-                <Text style={[styles.tabText, vue === t.k && styles.tabTextActive]}>{t.lbl}</Text>
-                {t.n > 0 && (
-                  <View style={[styles.tabBadge,
-                    vue === t.k ? styles.tabBadgeActive :
-                    t.hi ? styles.tabBadgeHi : {}]}>
-                    <Text style={[styles.tabBadgeText,
-                      vue === t.k ? { color: '#fff' } :
-                      t.hi ? { color: '#b45309' } : {}]}>{t.n}</Text>
+                { key: 'programme' as const, label: '📋 Programme', count: competitionCounts.programme },
+                { key: 'resultats' as const, label: '⚡ Résultats', count: competitionCounts.resultats },
+              ].map((item) => (
+                <Pressable key={item.key} style={[styles.tabBtn, tab === item.key && styles.tabBtnActive]} onPress={() => setTab(item.key)}>
+                  <Text style={[styles.tabBtnText, tab === item.key && styles.tabBtnTextActive]}>{item.label}</Text>
+                  <View style={[styles.tabCount, tab === item.key && styles.tabCountActive]}>
+                    <Text style={[styles.tabCountText, tab === item.key && styles.tabCountTextActive]}>{item.count}</Text>
                   </View>
-                )}
-              </Pressable>
-            ))}
-          </ScrollView>
-        )}
+                </Pressable>
+              ))}
+            </View>
 
-        {/* ── CONTENU ──────────────────────────────────────────────────── */}
-        {!data && !loading && !error && (
-          <View style={styles.empty}>
-            <Text style={styles.emptyIcon}>🏊</Text>
-            <Text style={styles.emptyTitle}>Saisir un ID de compétition</Text>
-            <Text style={styles.emptySub}>Retrouve l'ID sur liveffn.com</Text>
+            <View style={styles.filtersCard}>
+              <TextInput
+                value={searchAthlete}
+                onChangeText={setSearchAthlete}
+                placeholder="🔍 Rechercher un nageur…"
+                placeholderTextColor={COLORS.subtle}
+                style={styles.filterInput}
+              />
+
+              <Text style={styles.filterGroupTitle}>Réunion</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
+                <FilterChip label="Toutes" active={reunionFilter === ''} onPress={() => setReunionFilter('')} />
+                {displayedReunions.map((reunion) => (
+                  <FilterChip
+                    key={`reunion-chip-${reunion.reunion_num}`}
+                    label={`R${reunion.reunion_num}${reunion.reunion_moment ? ` · ${reunion.reunion_moment}` : ''}`}
+                    active={reunionFilter === reunion.reunion_num}
+                    onPress={() => setReunionFilter(reunion.reunion_num)}
+                  />
+                ))}
+              </ScrollView>
+
+              <Text style={styles.filterGroupTitle}>Nage</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
+                {NAGE_FILTERS.map((item) => (
+                  <FilterChip key={item.key || 'all-nage'} label={item.label} active={nageFilter === item.key} onPress={() => setNageFilter(item.key)} />
+                ))}
+              </ScrollView>
+
+              <Text style={styles.filterGroupTitle}>Type</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
+                {TYPE_FILTERS.map((item) => (
+                  <FilterChip key={item.key || 'all-type'} label={item.label} active={typeFilter === item.key} onPress={() => setTypeFilter(item.key)} />
+                ))}
+              </ScrollView>
+            </View>
+
+            {loadingDetail && !programme && !resultats ? (
+              <View style={styles.centerState}>
+                <ActivityIndicator color={COLORS.primaryLight} />
+                <Text style={styles.centerStateText}>Chargement de la compétition…</Text>
+              </View>
+            ) : null}
+
+            {tab === 'programme' ? (
+              <VueProgramme reunions={programmeReunions} reunionFilter={reunionFilter} />
+            ) : (
+              <VueResultats rows={resultRows} reunionsCount={displayedReunions.length} />
+            )}
+
+            {lastRefresh ? <Text style={styles.refreshText}>Dernière mise à jour : {formatClock(lastRefresh)}</Text> : null}
           </View>
+        ) : (
+          !loadingList && !error ? (
+            <View style={styles.emptyState}>
+              <Avatar name="CPN" size={64} />
+              <Text style={styles.emptyStateTitle}>Sélectionnez une compétition</Text>
+              <Text style={styles.emptyStateSub}>L’app utilise désormais les routes `/api/compet_v2/list`, `/programme` et `/resultats` du backend.</Text>
+            </View>
+          ) : null
         )}
 
-        {loading && !data && (
-          <View style={styles.empty}>
-            <ActivityIndicator size="large" color={COLORS.primaryLight} />
-            <Text style={styles.loadingText}>Connexion à liveffn.com…</Text>
-          </View>
-        )}
-
-        {error && (
+        {error ? (
           <View style={styles.errorBox}>
-            <Text style={styles.errorText}>❌ {error}</Text>
-            <Pressable onPress={handleLoad} style={styles.retryBtn}>
-              <Text style={styles.retryText}>Réessayer</Text>
-            </Pressable>
+            <Text style={styles.errorTitle}>Erreur</Text>
+            <Text style={styles.errorText}>{error}</Text>
           </View>
-        )}
-
-        {data && !data.rows?.length && (
-          <View style={styles.empty}>
-            <Text style={styles.emptyIcon}>🏊</Text>
-            <Text style={styles.emptyTitle}>Aucun résultat CPN</Text>
-            <Text style={styles.emptySub}>Vérifiez l'ID ou réessayez plus tard</Text>
-          </View>
-        )}
-
-        {data && !!data.rows?.length && (
-          <View style={{ flex: 1 }}>
-            {vue === 'programme' && <VueProgramme rows={filteredRows} />}
-            {vue === 'athletes'  && <VueAthletes  rows={filteredRows} />}
-            {vue === 'epreuves'  && <VueEpreuves  rows={filteredRows} />}
-            {vue === 'podiums'   && <VuePodiums   rows={filteredRows} />}
-          </View>
-        )}
-
-        {/* Avertissement résultats partiels */}
-        {data?.has_partial && (
-          <View style={styles.partialWarn}>
-            <Text style={styles.partialText}>⚠️ Résultats partiels — certaines épreuves sont encore en cours</Text>
-          </View>
-        )}
-
-      </KeyboardAvoidingView>
+        ) : null}
+      </ScrollView>
     </SafeAreaView>
+  );
+}
+
+function FilterChip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+  return (
+    <Pressable style={[styles.filterChip, active && styles.filterChipActive]} onPress={onPress}>
+      <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>{label}</Text>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.primary },
-
   topbar: {
     backgroundColor: COLORS.primary,
-    paddingHorizontal: 16, paddingBottom: 14, paddingTop: 4, gap: 10,
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
   },
-  topTitle: { color: '#fff', fontSize: 17, fontWeight: '900', letterSpacing: 0.2 },
-  topInputRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-  inputWrap: {
-    flex: 1, flexDirection: 'row', alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,.14)', borderRadius: 8,
-    borderWidth: 1.5, borderColor: 'rgba(255,255,255,.25)', overflow: 'hidden',
+  topTitle: { color: '#fff', fontSize: 19, fontWeight: '900' },
+  topSubtitle: { color: 'rgba(255,255,255,.72)', fontSize: 12, marginTop: 4 },
+  reloadBtn: {
+    backgroundColor: 'rgba(255,255,255,.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,.22)',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
-  inputLabel: { paddingHorizontal: 10, color: 'rgba(255,255,255,.55)', fontSize: 12, fontWeight: '700' },
-  input: { flex: 1, color: '#fff', fontWeight: '800', fontSize: 15, paddingVertical: 9, paddingRight: 10 },
-  btnLoad: {
-    backgroundColor: '#10b981', borderRadius: 8,
-    paddingHorizontal: 16, paddingVertical: 10,
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    shadowColor: '#10b981', shadowOpacity: 0.4, shadowRadius: 6, shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
+  reloadBtnText: { color: '#fff', fontWeight: '800', fontSize: 13 },
+  content: { padding: 14, gap: 16, backgroundColor: COLORS.bg },
+  section: { gap: 12 },
+  sectionTitle: { color: COLORS.text, fontSize: 17, fontWeight: '900' },
+  searchInput: {
+    backgroundColor: COLORS.card,
+    borderColor: COLORS.border,
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    color: COLORS.text,
+    fontSize: 14,
   },
-  btnDisabled: { backgroundColor: '#475569' },
-  btnText: { color: '#fff', fontWeight: '800', fontSize: 14 },
-  btnRefresh: {
-    backgroundColor: 'rgba(255,255,255,.16)', borderRadius: 8,
-    borderWidth: 1.5, borderColor: 'rgba(255,255,255,.3)',
-    paddingHorizontal: 12, paddingVertical: 10,
+  groupWrap: { gap: 10 },
+  groupTitle: { color: COLORS.muted, fontWeight: '800', fontSize: 13, textTransform: 'uppercase' },
+  competitionList: { gap: 10 },
+  competitionCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: 14,
+    gap: 8,
   },
-  btnRefreshText: { fontSize: 16 },
-
-  compHeader: {
-    backgroundColor: COLORS.card, paddingHorizontal: 16, paddingVertical: 12,
-    borderBottomWidth: 1, borderBottomColor: COLORS.border,
-    borderLeftWidth: 4, borderLeftColor: COLORS.primaryLight, gap: 8,
+  competitionCardActive: { borderColor: COLORS.primaryLight, borderWidth: 2 },
+  competitionCardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  statusPill: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
+  statusPillText: { fontSize: 11, fontWeight: '800' },
+  cidText: { color: COLORS.subtle, fontSize: 12, fontWeight: '700' },
+  competitionName: { color: COLORS.text, fontSize: 15, fontWeight: '900' },
+  competitionMeta: { color: COLORS.muted, fontSize: 12, lineHeight: 18 },
+  detailHeader: {
+    backgroundColor: COLORS.card,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: 16,
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'flex-start',
   },
-  compHeaderLeft: { gap: 3 },
-  compTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
-  compTitle: { fontSize: 14.5, fontWeight: '900', color: COLORS.navy, flex: 1 },
-  compMeta: { fontSize: 11.5, color: COLORS.subtle },
-  kpiScroll: { flexGrow: 0 },
-  kpi: { alignItems: 'center', marginRight: 18 },
-  kpiVal: { fontSize: 20, fontWeight: '900' },
-  kpiLbl: { fontSize: 9, color: COLORS.subtle, fontWeight: '700', textTransform: 'uppercase' },
-  kpiTime: { fontSize: 13, fontWeight: '700', color: COLORS.muted },
-
-  toolbar: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    paddingHorizontal: 12, paddingVertical: 8,
-    backgroundColor: COLORS.bg, borderBottomWidth: 1, borderBottomColor: COLORS.border,
+  detailTitle: { color: COLORS.text, fontSize: 18, fontWeight: '900' },
+  detailMeta: { color: COLORS.muted, fontSize: 13, lineHeight: 19 },
+  detailSub: { color: COLORS.subtle, fontSize: 12 },
+  kpiRow: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
+  kpiCard: {
+    flexGrow: 1,
+    minWidth: 72,
+    backgroundColor: COLORS.card,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+  },
+  kpiValue: { color: COLORS.primaryLight, fontSize: 20, fontWeight: '900' },
+  kpiLabel: { color: COLORS.muted, fontSize: 12, marginTop: 4 },
+  actionsRow: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
+  primaryBtn: {
+    backgroundColor: '#10b981',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  primaryBtnText: { color: '#fff', fontWeight: '900' },
+  secondaryBtn: {
+    backgroundColor: COLORS.card,
+    borderColor: COLORS.border,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  secondaryBtnActive: { borderColor: COLORS.primaryLight, backgroundColor: '#eff6ff' },
+  secondaryBtnText: { color: COLORS.text, fontWeight: '800' },
+  secondaryBtnTextActive: { color: COLORS.primaryLight },
+  tabRow: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
+  tabBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: COLORS.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  tabBtnActive: { backgroundColor: COLORS.primaryLight, borderColor: COLORS.primaryLight },
+  tabBtnText: { color: COLORS.text, fontWeight: '900' },
+  tabBtnTextActive: { color: '#fff' },
+  tabCount: { backgroundColor: '#eff6ff', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
+  tabCountActive: { backgroundColor: 'rgba(255,255,255,.18)' },
+  tabCountText: { color: COLORS.primaryLight, fontWeight: '800', fontSize: 11 },
+  tabCountTextActive: { color: '#fff' },
+  filtersCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: 14,
+    gap: 10,
   },
   filterInput: {
-    flex: 1, backgroundColor: COLORS.card, borderRadius: 9,
-    borderWidth: 1.5, borderColor: COLORS.border,
-    paddingHorizontal: 13, paddingVertical: 8, fontSize: 13, color: COLORS.navy,
+    backgroundColor: COLORS.neutralBg,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    color: COLORS.text,
+    fontSize: 14,
   },
-  autoBtn: {
-    paddingHorizontal: 12, paddingVertical: 8,
-    backgroundColor: COLORS.card, borderRadius: 9, borderWidth: 1.5, borderColor: COLORS.border,
+  filterGroupTitle: { color: COLORS.muted, fontSize: 12, fontWeight: '800', textTransform: 'uppercase' },
+  chipsRow: { gap: 8, paddingRight: 14 },
+  filterChip: {
+    backgroundColor: COLORS.neutralBg,
+    borderColor: COLORS.border,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
-  autoBtnOn: { backgroundColor: '#f0fdf4', borderColor: '#86efac' },
-  autoBtnText: { fontSize: 12, fontWeight: '700', color: COLORS.muted },
-  autoBtnTextOn: { color: '#16a34a' },
-  liveBtn: {
-    paddingHorizontal: 11, paddingVertical: 8,
-    backgroundColor: COLORS.card, borderRadius: 9, borderWidth: 1.5, borderColor: COLORS.border,
+  filterChipActive: { backgroundColor: COLORS.primaryLight, borderColor: COLORS.primaryLight },
+  filterChipText: { color: COLORS.text, fontWeight: '700', fontSize: 12 },
+  filterChipTextActive: { color: '#fff' },
+  centerState: { alignItems: 'center', justifyContent: 'center', paddingVertical: 22, gap: 8 },
+  centerStateText: { color: COLORS.muted, fontSize: 13 },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 48,
+    gap: 12,
   },
-  liveBtnText: { fontSize: 12, fontWeight: '700', color: COLORS.primaryLight },
-
-  // Tabs scrollable horizontalement pour loger les 4 onglets
-  tabsScroll: { flexGrow: 0, backgroundColor: COLORS.bg, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  tabs: { paddingHorizontal: 12, paddingVertical: 8, gap: 6 },
-  tab: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
-    paddingVertical: 8, paddingHorizontal: 12,
-    borderRadius: 9, borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: COLORS.card,
-  },
-  tabActive: {
-    backgroundColor: COLORS.primaryLight, borderColor: 'transparent',
-    shadowColor: COLORS.primaryLight, shadowOpacity: 0.3, shadowRadius: 6, shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
-  },
-  tabText: { fontSize: 12, fontWeight: '700', color: COLORS.muted },
-  tabTextActive: { color: '#fff' },
-  tabBadge: { backgroundColor: '#f1f5f9', borderRadius: 20, paddingHorizontal: 7, paddingVertical: 1 },
-  tabBadgeActive: { backgroundColor: 'rgba(255,255,255,.25)' },
-  tabBadgeHi: { backgroundColor: '#fef9c3' },
-  tabBadgeText: { fontSize: 10, fontWeight: '800', color: COLORS.subtle },
-
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, backgroundColor: COLORS.bg },
-  emptyIcon: { fontSize: 52, marginBottom: 14 },
-  emptyTitle: { fontSize: 17, fontWeight: '700', color: COLORS.muted, textAlign: 'center' },
-  emptySub: { fontSize: 13, color: COLORS.subtle, marginTop: 6, textAlign: 'center' },
-  loadingText: { marginTop: 16, fontSize: 14, color: COLORS.muted },
+  emptyStateTitle: { color: COLORS.text, fontSize: 17, fontWeight: '900' },
+  emptyStateSub: { color: COLORS.muted, fontSize: 13, textAlign: 'center', lineHeight: 19 },
+  refreshText: { color: COLORS.subtle, fontSize: 12, textAlign: 'center', paddingBottom: 10 },
   errorBox: {
-    margin: 16, padding: 16, backgroundColor: '#fee2e2', borderRadius: 10,
-    borderWidth: 1.5, borderColor: '#fca5a5', alignItems: 'center', gap: 10,
+    backgroundColor: COLORS.dangerBg,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#f5c2c7',
+    padding: 14,
+    gap: 6,
   },
-  errorText: { fontSize: 14, color: '#b91c1c', fontWeight: '700', textAlign: 'center' },
-  retryBtn: { backgroundColor: '#dc2626', borderRadius: 8, paddingHorizontal: 20, paddingVertical: 8 },
-  retryText: { color: '#fff', fontWeight: '700', fontSize: 13 },
-  partialWarn: {
-    margin: 10, marginTop: 0, padding: 10,
-    backgroundColor: '#fff7ed', borderRadius: 9, borderWidth: 1.5, borderColor: '#fed7aa',
-  },
-  partialText: { fontSize: 12, color: '#c2410c', fontWeight: '700', textAlign: 'center' },
+  errorTitle: { color: COLORS.danger, fontSize: 15, fontWeight: '900' },
+  errorText: { color: COLORS.danger, fontSize: 13, lineHeight: 18 },
 });
