@@ -1,168 +1,175 @@
-import React from 'react';
-import { View, Text, FlatList, StyleSheet } from 'react-native';
-import { CompetRow } from '../utils/types';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { COLORS } from '../utils/constants';
-import { Avatar, NagePill, SerieBadge, PlotBadge, HeureBadge, TempsRef } from './Atoms';
+import { formatReunionLabel, groupByAthlete, sortProgrammeRows } from '../utils/helpers';
+import { ProgrammeRow, Reunion } from '../utils/types';
+import { Avatar, NagePill, PlotBadge, SectionCard, TypeBadge } from './Atoms';
 
-interface Props { rows: CompetRow[]; }
+interface Props {
+  reunions: Reunion<ProgrammeRow>[];
+  reunionFilter: number | '';
+}
 
-export default function VueProgramme({ rows }: Props) {
-  // Trier par heure de passage, puis par athlète
-  const sorted = [...rows].sort((a, b) => {
-    const ha = (a.heure_passage || '99:99').replace('h', ':');
-    const hb = (b.heure_passage || '99:99').replace('h', ':');
-    return ha < hb ? -1 : ha > hb ? 1 : a.athlete.localeCompare(b.athlete);
-  });
+export default function VueProgramme({ reunions, reunionFilter }: Props) {
+  const [opened, setOpened] = useState<number[]>([]);
 
-  // Grouper par heure pour les séparateurs de section
-  const sections: Array<{ heure: string; items: CompetRow[] }> = [];
-  for (const r of sorted) {
-    const h = r.heure_passage || '';
-    const last = sections[sections.length - 1];
-    if (last && last.heure === h) {
-      last.items.push(r);
-    } else {
-      sections.push({ heure: h, items: [r] });
+  useEffect(() => {
+    if (reunionFilter !== '') {
+      setOpened([reunionFilter]);
+      return;
     }
-  }
+    setOpened(reunions.length ? [reunions[0].reunion_num] : []);
+  }, [reunionFilter, reunions]);
 
-  // Aplatir en items avec header d'heure
-  type ListItem =
-    | { type: 'header'; heure: string }
-    | { type: 'row'; data: CompetRow; idx: number };
+  const visible = useMemo(() => reunions, [reunions]);
 
-  const items: ListItem[] = [];
-  sections.forEach(sec => {
-    if (sec.heure) {
-      items.push({ type: 'header', heure: sec.heure });
-    }
-    sec.items.forEach((r, i) => items.push({ type: 'row', data: r, idx: i }));
-  });
-
-  const renderItem = ({ item }: { item: ListItem }) => {
-    if (item.type === 'header') {
-      return (
-        <View style={styles.timeHeader}>
-          <Text style={styles.timeHeaderText}>⏰ {item.heure}</Text>
-        </View>
-      );
-    }
-    const r = item.data;
-    const hasResult = !!r.temps_result;
-    return (
-      <View style={[styles.row, item.idx % 2 === 1 && styles.rowAlt]}>
-        {/* Athlète */}
-        <View style={styles.athCell}>
-          <Avatar name={r.athlete} size={32} />
-          <View style={styles.athInfo}>
-            <Text style={styles.athName} numberOfLines={1}>{r.athlete}</Text>
-            {r.naissance ? <Text style={styles.athSub}>né {r.naissance}</Text> : null}
-          </View>
-        </View>
-
-        {/* Épreuve */}
-        <View style={styles.epCell}>
-          <NagePill ep={r.epreuve} />
-        </View>
-
-        {/* Tps Réf */}
-        <View style={styles.refCell}>
-          <Text style={styles.colLabel}>Réf.</Text>
-          <TempsRef temps={r.temps_ref} />
-        </View>
-
-        {/* Série + Plot */}
-        <View style={styles.progCell}>
-          <View style={styles.seriePlotRow}>
-            <SerieBadge serie={r.serie} />
-            <PlotBadge plot={r.plot} />
-          </View>
-        </View>
-
-        {/* Résultat si disponible */}
-        {hasResult && (
-          <View style={styles.resultCell}>
-            <Text style={[
-              styles.tempsResult,
-              r.tendance === 'better' && { color: COLORS.success },
-              r.tendance === 'worse'  && { color: COLORS.danger },
-            ]}>
-              {r.temps_result}
-            </Text>
-            {r.tendance === 'better' && <Text style={styles.progBetter}>▼</Text>}
-            {r.tendance === 'worse'  && <Text style={styles.progWorse}>▲</Text>}
-            {r.tendance === 'stable' && <Text style={styles.progStable}>→</Text>}
-          </View>
-        )}
-      </View>
-    );
-  };
-
-  if (!rows.length) {
+  if (!visible.length) {
     return (
       <View style={styles.empty}>
         <Text style={styles.emptyIcon}>📋</Text>
-        <Text style={styles.emptyTitle}>Aucun programme disponible</Text>
-        <Text style={styles.emptySub}>Les données de programme apparaîtront ici</Text>
+        <Text style={styles.emptyTitle}>Programme non disponible</Text>
+        <Text style={styles.emptySub}>Chargez une compétition configurée et un programme scrappé côté admin.</Text>
       </View>
     );
   }
 
+  const toggle = (reunionNum: number) => {
+    setOpened((prev) => (prev.includes(reunionNum) ? prev.filter((item) => item !== reunionNum) : [...prev, reunionNum]));
+  };
+
   return (
-    <FlatList
-      data={items}
-      keyExtractor={(item, i) =>
-        item.type === 'header' ? `h-${item.heure}-${i}` : `r-${item.data.athlete}-${item.data.epreuve}-${i}`
-      }
-      renderItem={renderItem}
-      contentContainerStyle={styles.list}
-      showsVerticalScrollIndicator={false}
-    />
+    <View style={styles.wrap}>
+      {visible.map((reunion) => {
+        const isOpen = opened.includes(reunion.reunion_num);
+        const athletes = groupByAthlete(reunion.lignes).map((group) => ({
+          ...group,
+          lignes: sortProgrammeRows(group.lignes),
+        }));
+
+        return (
+          <SectionCard key={`reunion-${reunion.reunion_num}`}>
+            <Pressable style={styles.reunionHeader} onPress={() => toggle(reunion.reunion_num)}>
+              <Text style={styles.reunionArrow}>{isOpen ? '▼' : '▶'}</Text>
+              <View style={styles.reunionTitleWrap}>
+                <Text style={styles.reunionTitle}>Réunion {reunion.reunion_num}</Text>
+                <Text style={styles.reunionLabel}>{formatReunionLabel(reunion.reunion_label)}</Text>
+              </View>
+              {reunion.reunion_moment ? <Text style={styles.reunionMoment}>{reunion.reunion_moment}</Text> : null}
+            </Pressable>
+
+            {isOpen && (
+              <View style={styles.reunionBody}>
+                {athletes.map((ath) => (
+                  <View key={`${ath.athlete_nom}-${ath.annee_naiss}`} style={styles.athCard}>
+                    <View style={styles.athHeader}>
+                      <View style={styles.athIdentity}>
+                        <Avatar name={ath.athlete_nom} size={42} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.athName}>{ath.athlete_nom}</Text>
+                          <Text style={styles.athMeta}>{[ath.annee_naiss, ath.sexe].filter(Boolean).join(' · ') || 'Programme'}</Text>
+                        </View>
+                      </View>
+                      <View style={styles.countBadge}>
+                        <Text style={styles.countBadgeText}>{ath.lignes.length} course{ath.lignes.length > 1 ? 's' : ''}</Text>
+                      </View>
+                    </View>
+
+                    {ath.lignes.map((line, idx) => (
+                      <View key={`${ath.athlete_nom}-${idx}-${line.epreuve_label}-${line.serie_num}`} style={[styles.row, idx > 0 && styles.rowDivider]}>
+                        <View style={styles.colHour}>
+                          <Text style={styles.label}>Heure</Text>
+                          <Text style={styles.value}>{line.heure_depart || '—'}</Text>
+                        </View>
+
+                        <View style={styles.colEvent}>
+                          <NagePill label={line.epreuve_norm || line.epreuve_label} />
+                          <TypeBadge typeSerie={line.type_serie} />
+                        </View>
+
+                        <View style={styles.inlineMeta}>
+                          <View style={styles.metaBox}>
+                            <Text style={styles.label}>Série</Text>
+                            <Text style={styles.value}>{line.serie_num ? `S${line.serie_num}` : '—'}</Text>
+                          </View>
+                          <View style={styles.metaBox}>
+                            <Text style={styles.label}>Plot</Text>
+                            <PlotBadge plot={line.plot} />
+                          </View>
+                          <View style={[styles.metaBox, styles.refBox]}>
+                            <Text style={styles.label}>Référence</Text>
+                            <Text style={styles.refValue}>{line.temps_ref || '—'}</Text>
+                          </View>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                ))}
+              </View>
+            )}
+          </SectionCard>
+        );
+      })}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  list: { paddingBottom: 40 },
-
-  timeHeader: {
-    backgroundColor: '#1e3a8a',
-    paddingHorizontal: 16, paddingVertical: 7,
-    marginTop: 4,
+  wrap: { gap: 12, paddingBottom: 28 },
+  reunionHeader: {
+    backgroundColor: COLORS.reunionHeader,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
-  timeHeaderText: {
-    color: '#fff', fontSize: 13, fontWeight: '800', letterSpacing: 0.3,
+  reunionArrow: { color: '#fff', fontSize: 14, fontWeight: '900' },
+  reunionTitleWrap: { flex: 1 },
+  reunionTitle: { color: '#fff', fontSize: 13, fontWeight: '900' },
+  reunionLabel: { color: 'rgba(255,255,255,.85)', fontSize: 12, marginTop: 2 },
+  reunionMoment: {
+    color: '#6b3f00',
+    backgroundColor: '#ffd79a',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    fontSize: 11,
+    fontWeight: '800',
   },
-
-  row: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 12, paddingVertical: 9,
+  reunionBody: { backgroundColor: '#f7fafd', padding: 10, gap: 10 },
+  athCard: {
     backgroundColor: COLORS.card,
-    borderBottomWidth: 1, borderBottomColor: COLORS.border,
-    gap: 8, flexWrap: 'wrap',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    overflow: 'hidden',
   },
-  rowAlt: { backgroundColor: '#f8fafc' },
-
-  athCell: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 2, minWidth: 130 },
-  athInfo: { flex: 1 },
-  athName: { fontSize: 13, fontWeight: '800', color: COLORS.navy },
-  athSub:  { fontSize: 10, color: COLORS.subtle },
-
-  epCell:   { flex: 1.2, minWidth: 80 },
-  refCell:  { flex: 1, minWidth: 70, alignItems: 'flex-start' },
-  progCell: { flex: 1, minWidth: 80 },
-  resultCell: { flex: 1, minWidth: 80, flexDirection: 'row', alignItems: 'center', gap: 4 },
-
-  colLabel: { fontSize: 9, color: COLORS.subtle, fontWeight: '700', textTransform: 'uppercase', marginBottom: 2 },
-
-  seriePlotRow: { flexDirection: 'row', gap: 5, alignItems: 'center' },
-
-  tempsResult: { fontFamily: 'Courier', fontSize: 14, fontWeight: '700', color: '#065f46' },
-  progBetter: { color: '#16a34a', fontWeight: '900', fontSize: 14 },
-  progWorse:  { color: '#dc2626', fontWeight: '900', fontSize: 14 },
-  progStable: { color: '#64748b', fontWeight: '700', fontSize: 14 },
-
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 60 },
-  emptyIcon: { fontSize: 44, marginBottom: 12 },
-  emptyTitle: { fontSize: 16, fontWeight: '700', color: COLORS.muted, textAlign: 'center' },
-  emptySub: { fontSize: 13, color: COLORS.subtle, marginTop: 6, textAlign: 'center' },
+  athHeader: {
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    backgroundColor: '#fbfdff',
+  },
+  athIdentity: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
+  athName: { color: COLORS.text, fontSize: 15, fontWeight: '900' },
+  athMeta: { color: COLORS.muted, fontSize: 12, marginTop: 2 },
+  countBadge: { backgroundColor: '#eef4fb', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
+  countBadgeText: { color: COLORS.primarySoft, fontSize: 11, fontWeight: '800' },
+  row: { paddingHorizontal: 12, paddingVertical: 12, gap: 10 },
+  rowDivider: { borderTopWidth: 1, borderTopColor: COLORS.border },
+  colHour: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  colEvent: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  inlineMeta: { flexDirection: 'row', gap: 10, alignItems: 'center', flexWrap: 'wrap' },
+  metaBox: { minWidth: 62, gap: 4 },
+  refBox: { flex: 1, minWidth: 100 },
+  label: { color: COLORS.subtle, fontSize: 11, fontWeight: '700', textTransform: 'uppercase' },
+  value: { color: COLORS.text, fontSize: 13, fontWeight: '800' },
+  refValue: { color: COLORS.muted, fontSize: 13, fontWeight: '700', fontFamily: 'monospace' },
+  empty: { alignItems: 'center', justifyContent: 'center', padding: 50 },
+  emptyIcon: { fontSize: 42, marginBottom: 10 },
+  emptyTitle: { fontSize: 16, fontWeight: '800', color: COLORS.text, textAlign: 'center' },
+  emptySub: { fontSize: 13, color: COLORS.muted, textAlign: 'center', marginTop: 6 },
 });
