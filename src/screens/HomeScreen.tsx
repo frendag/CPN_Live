@@ -212,12 +212,23 @@ export default function HomeScreen() {
       <StatusBar barStyle="light-content" backgroundColor={COLORS.primaryDark} />
 
       {/* ─── Top Bar ─── */}
-      <LinearGradient colors={['#040f18', '#071829']} style={styles.topbar} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+      <LinearGradient colors={['#001a33', '#071829']} style={styles.topbar} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+        {/* Logo compact CPN */}
         <View style={styles.topLeft}>
-          <Text style={styles.topEmoji}>🏊</Text>
-          <View>
-            <Text style={styles.topTitle}>CPN Live</Text>
-            <Text style={styles.topSub}>Cergy Pontoise Natation</Text>
+          {/* Icône mark */}
+          <View style={styles.logoMark}>
+            <View style={styles.logoWave} />
+            <View style={styles.logoCurve} />
+            <Text style={styles.logoMarkText}>CPN</Text>
+          </View>
+          {/* Texte */}
+          <View style={styles.logoTextBlock}>
+            <Text style={styles.logoTextMain}>CERGY PONTOISE</Text>
+            <View style={styles.logoRedLine} />
+            <View style={styles.logoBottomRow}>
+              <Text style={styles.logoTextNata}>NATATION</Text>
+              <Text style={styles.logoTextAnalytics}>Analytics</Text>
+            </View>
           </View>
         </View>
         {section === 'competition' && (
@@ -500,13 +511,25 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.primaryDark },
 
-  // Top bar
-  topbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 6, paddingBottom: 12, gap: 10 },
-  topLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  topEmoji: { fontSize: 28 },
-  topTitle: { color: COLORS.text, fontSize: 20, fontWeight: '900', letterSpacing: -0.5 },
-  topSub: { color: COLORS.muted, fontSize: 11, marginTop: 1 },
-  reloadBtn: { width: 36, height: 36, borderRadius: 12, backgroundColor: COLORS.accentDim, borderWidth: 1, borderColor: COLORS.accentGlow, alignItems: 'center', justifyContent: 'center' },
+  // Top bar + Logo
+  topbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingTop: 8, paddingBottom: 10, gap: 10 },
+  topLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
+
+  // Icône mark
+  logoMark: { width: 44, height: 44, borderRadius: 10, backgroundColor: '#001a33', overflow: 'hidden', position: 'relative', justifyContent: 'flex-end', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  logoWave:  { position: 'absolute', bottom: 0, left: 0, right: 0, height: 10, backgroundColor: '#0055AA', opacity: 0.85 },
+  logoCurve: { position: 'absolute', top: 8, left: 6, right: 6, height: 20, borderColor: '#FF0000', borderTopWidth: 2.5, borderRadius: 2, transform: [{ rotate: '-15deg' }] },
+  logoMarkText: { color: '#fff', fontSize: 9, fontWeight: '900', letterSpacing: 0.5, paddingBottom: 2, zIndex: 1 },
+
+  // Bloc texte logo
+  logoTextBlock: { flex: 1, gap: 1 },
+  logoTextMain: { color: '#FFFFFF', fontSize: 13, fontWeight: '900', letterSpacing: 1, fontStyle: 'italic' },
+  logoRedLine:  { height: 1.5, backgroundColor: '#FF0000', width: '85%', opacity: 0.9 },
+  logoBottomRow:{ flexDirection: 'row', alignItems: 'baseline', gap: 8 },
+  logoTextNata: { color: '#FF0000', fontSize: 11, fontWeight: '700', letterSpacing: 4 },
+  logoTextAnalytics: { color: '#FFD54A', fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
+
+  reloadBtn: { width: 36, height: 36, borderRadius: 12, backgroundColor: COLORS.accentDim, borderWidth: 1, borderColor: COLORS.accentGlow, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   reloadBtnText: { color: COLORS.accent, fontSize: 20, fontWeight: '700' },
 
   // Nav bar
