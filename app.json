@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "CPN Compét Live",
+    "name": "CPN Analytics Live",
     "slug": "cpnlive",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -10,7 +10,7 @@
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#1e3a8a"
+      "backgroundColor": "#001a33"
     },
     "assetBundlePatterns": [
       "**/*"
@@ -22,7 +22,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#1e3a8a"
+        "backgroundColor": "#001a33"
       },
       "package": "fr.cpnnatation.competlive"
     },
