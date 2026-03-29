@@ -14,11 +14,24 @@ interface Props {
 // ─── Animated accordion row ─────────────────────────────────────────────────
 function AccordionCard({ isOpen, children }: { isOpen: boolean; children: React.ReactNode }) {
   const anim = useRef(new Animated.Value(isOpen ? 1 : 0)).current;
+
   useEffect(() => {
-    Animated.spring(anim, { toValue: isOpen ? 1 : 0, useNativeDriver: false, tension: 80, friction: 12 }).start();
+    Animated.spring(anim, {
+      toValue: isOpen ? 1 : 0,
+      useNativeDriver: false,
+      tension: 80,
+      friction: 12,
+    }).start();
   }, [isOpen]);
+
+  const maxHeight = anim.interpolate({
+    inputRange:  [0, 1],
+    outputRange: [0, 2000],   // 2000 = hauteur max suffisante
+  });
+  const opacity = anim;
+
   return (
-    <Animated.View style={{ opacity: anim, overflow: 'hidden' }}>
+    <Animated.View style={{ maxHeight, opacity, overflow: 'hidden' }}>
       {children}
     </Animated.View>
   );

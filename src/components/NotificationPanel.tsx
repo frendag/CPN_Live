@@ -255,7 +255,7 @@ export default function NotificationPanel({ competitionId, isLive }: Props) {
 }
 
 const s = StyleSheet.create({
-  container: { position: 'relative' },
+  container: { position: 'relative', zIndex: 9999 },
 
   bellBtn: { width: 36, height: 36, borderRadius: 12, backgroundColor: COLORS.accentDim,
              borderWidth: 1, borderColor: COLORS.accentGlow, alignItems: 'center', justifyContent: 'center' },
@@ -267,9 +267,9 @@ const s = StyleSheet.create({
   panel: {
     position: 'absolute', top: 44, right: 0, width: 320,
     backgroundColor: COLORS.card, borderRadius: 16, borderWidth: 1,
-    borderColor: COLORS.border, zIndex: 999, maxHeight: 480,
-    shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 16, shadowOffset: { width: 0, height: 4 },
-    elevation: 12,
+    borderColor: COLORS.border, zIndex: 9999, maxHeight: 480,
+    shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 20, shadowOffset: { width: 0, height: 6 },
+    elevation: 24,
   },
   panelHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
                  paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: COLORS.border },
