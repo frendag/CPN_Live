@@ -12,6 +12,7 @@ import BottomSheet from '../components/BottomSheet';
 import EmptyState from '../components/EmptyState';
 import VueProgramme from '../components/VueProgramme';
 import VueResultats from '../components/VueResultats';
+import NotificationPanel from '../components/NotificationPanel';
 import { useTabAnimation } from '../hooks/useTabAnimation';
 import { useCompetV2 } from '../hooks/useCompetV2';
 import {
@@ -232,12 +233,18 @@ export default function HomeScreen() {
           </View>
         </View>
         {section === 'competition' && (
-          <Pressable style={styles.reloadBtn} onPress={loadCompetitions}>
-            {loadingList
-              ? <ActivityIndicator size="small" color={COLORS.accent} />
-              : <Text style={styles.reloadBtnText}>↻</Text>
-            }
-          </Pressable>
+          <View style={styles.topRight}>
+            <NotificationPanel
+              competitionId={selectedCompetitionId}
+              isLive={!!(selectedCompetitionId && resultats?.competition && isCompetitionLive(resultats.competition))}
+            />
+            <Pressable style={styles.reloadBtn} onPress={loadCompetitions}>
+              {loadingList
+                ? <ActivityIndicator size="small" color={COLORS.accent} />
+                : <Text style={styles.reloadBtnText}>↻</Text>
+              }
+            </Pressable>
+          </View>
         )}
       </LinearGradient>
 
@@ -529,6 +536,7 @@ const styles = StyleSheet.create({
   logoTextNata: { color: '#FF0000', fontSize: 11, fontWeight: '700', letterSpacing: 4 },
   logoTextAnalytics: { color: '#FFD54A', fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
 
+  topRight:  { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0 },
   reloadBtn: { width: 36, height: 36, borderRadius: 12, backgroundColor: COLORS.accentDim, borderWidth: 1, borderColor: COLORS.accentGlow, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   reloadBtnText: { color: COLORS.accent, fontSize: 20, fontWeight: '700' },
 
