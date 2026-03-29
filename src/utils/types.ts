@@ -81,6 +81,12 @@ export interface ResultRow {
   temps_ref_sec?: number | null;
   plot?: number | string | null;
   serie_num?: number | string | null;
+  // Qualification
+  niveau_atteint?: string | null;
+  niveau_superieur?: string | null;
+  next_sec?: number | null;
+  next_temps?: string | null;
+  next_delta_pct?: number | null;
 }
 
 export interface Reunion<T> {
