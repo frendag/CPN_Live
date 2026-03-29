@@ -35,7 +35,14 @@
       "compileSdkVersion": 34,
       "targetSdkVersion": 34,
       "minSdkVersion": 23,
-      "versionCode": 2
+      "versionCode": 2,
+      "permissions": [
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE",
+        "USE_EXACT_ALARM",
+        "SCHEDULE_EXACT_ALARM",
+        "POST_NOTIFICATIONS"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -44,7 +51,18 @@
     },
     "plugins": [
       "expo-router",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#001a33",
+          "sounds": [],
+          "androidMode": "default",
+          "androidCollapsedTitle": "CPN Live",
+          "iosDisplayInForeground": true
+        }
+      ]
     ],
     "extra": {
       "eas": {
