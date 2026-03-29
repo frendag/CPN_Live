@@ -13,6 +13,8 @@ import {
   StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Haptics from 'expo-haptics';
+import { sendLocalNotification, setupNotifications } from '../utils/notifications';
 import { COLORS } from '../utils/constants';
 import { API_BASE } from '../utils/constants';
 
@@ -57,6 +59,11 @@ export default function NotificationPanel({ competitionId, isLive }: Props) {
   const slideY   = useRef(new Animated.Value(-300)).current;
   const opacity  = useRef(new Animated.Value(0)).current;
 
+  // ── Setup notifications au montage ───────────────────────────────────────
+  useEffect(() => {
+    setupNotifications();
+  }, []);
+
   // ── Persistance liste de surveillance ────────────────────────────────────
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then(v => {
@@ -99,7 +106,30 @@ export default function NotificationPanel({ competitionId, isLive }: Props) {
         setNotifs(prev => {
           const ids = new Set(prev.map(n => n.id));
           const fresh = items.filter(n => !ids.has(n.id));
-          if (fresh.length > 0) setNewCount(c => c + fresh.length);
+          if (fresh.length > 0) {
+            setNewCount(c => c + fresh.length);
+            // Push + vibration pour chaque nouveau résultat
+            fresh.forEach(n => {
+              if (n.niveau_atteint) {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              } else {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              }
+              sendLocalNotification({
+                athleteNom:      n.athlete_nom,
+                epreuveLabel:    n.epreuve_label,
+                tempsResult:     n.temps_result || '—',
+                points:          n.points,
+                rangGeneral:     n.rang_general,
+                deltaSec:        n.delta_sec,
+                tendance:        n.tendance,
+                niveauAtteint:   n.niveau_atteint,
+                niveauSuperieur: n.niveau_superieur,
+                nextDeltaPct:    n.next_delta_pct,
+                nextTemps:       n.next_temps,
+              }).catch(() => {});
+            });
+          }
           return [...fresh, ...prev];
         });
       }
