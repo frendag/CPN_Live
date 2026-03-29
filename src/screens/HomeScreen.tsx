@@ -23,6 +23,9 @@ import { AppSection, CompetitionStatus, CompetitionTab, NageFilter, TypeFilter }
 
 const STATUS_ORDER: CompetitionStatus[] = ['en_cours', 'a_venir', 'passee'];
 
+// ─── Overlay zIndex pour les panneaux flottants ───────────────────────────────
+const OVERLAY_Z = 999;
+
 // ─── Reusable pill chip ───────────────────────────────────────────────────────
 function Chip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
   const scale = useRef(new Animated.Value(1)).current;
@@ -234,10 +237,12 @@ export default function HomeScreen() {
         </View>
         {section === 'competition' && (
           <View style={styles.topRight}>
-            <NotificationPanel
-              competitionId={selectedCompetitionId}
-              isLive={!!(selectedCompetitionId && resultats?.competition && isCompetitionLive(resultats.competition))}
-            />
+            <View style={{ zIndex: OVERLAY_Z }}>
+              <NotificationPanel
+                competitionId={selectedCompetitionId}
+                isLive={!!(selectedCompetitionId && resultats?.competition && isCompetitionLive(resultats.competition))}
+              />
+            </View>
             <Pressable style={styles.reloadBtn} onPress={loadCompetitions}>
               {loadingList
                 ? <ActivityIndicator size="small" color={COLORS.accent} />
@@ -519,7 +524,7 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.primaryDark },
 
   // Top bar + Logo
-  topbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingTop: 8, paddingBottom: 10, gap: 10 },
+  topbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingTop: 8, paddingBottom: 10, gap: 10, zIndex: OVERLAY_Z, overflow: 'visible' },
   topLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
 
   // Icône mark
