@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
 import { Stack } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { setupNotifications } from '../src/utils/notifications';
 
 // ─── Logo SVG-like dessiné en RN ─────────────────────────────────────────────
 function CpnLogoMark({ size = 72 }: { size?: number }) {
@@ -92,6 +93,10 @@ function SplashScreen() {
 }
 
 export default function RootLayout() {
+  useEffect(() => {
+    setupNotifications();
+  }, []);
+
   return (
     <SafeAreaProvider>
       <Stack screenOptions={{ headerShown: false, animation: 'fade' }} />
