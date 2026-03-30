@@ -6,6 +6,7 @@ export type TrainingState = 'idle' | 'running' | 'stopped';
 export interface TrainingAthlete {
   id: number;
   label: string;
+  name: string;
 }
 
 export interface TrainingSplit {
@@ -15,7 +16,8 @@ export interface TrainingSplit {
 }
 
 export interface TrainingPerfPayload {
-  athlete_id: number;
+  athlete_id?: number;
+  athlete_name: string;
   stroke_code: StrokeCode;
   distance_m: number;
   pool_length_m: PoolLength;

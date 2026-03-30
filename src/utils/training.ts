@@ -1,5 +1,5 @@
 import { buildApiUrl } from './api';
-import { PoolLength, StrokeCode, TrainingPerfPayload } from './trainingTypes';
+import { PoolLength, StrokeCode, TrainingPerfPayload, TrainingPerfResponse } from './trainingTypes';
 
 export const STROKE_DISTANCES: Record<StrokeCode, number[]> = {
   NL: [10, 25, 50, 100, 200, 400, 800, 1500],
@@ -27,10 +27,7 @@ export function formatMs(ms: number): string {
   const minutes = Math.floor(total / 60000);
   const seconds = Math.floor((total % 60000) / 1000);
   const centiseconds = Math.floor((total % 1000) / 10);
-  if (minutes > 0) {
-    return `${minutes}:${String(seconds).padStart(2, '0')}.${String(centiseconds).padStart(2, '0')}`;
-  }
-  return `${seconds}.${String(centiseconds).padStart(2, '0')}`;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(centiseconds).padStart(2, '0')}`;
 }
 
 export function formatPerformedAt(date = new Date()): string {
@@ -43,7 +40,7 @@ export function formatPerformedAt(date = new Date()): string {
   return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 }
 
-export async function saveTrainingPerf(payload: TrainingPerfPayload) {
+export async function saveTrainingPerf(payload: TrainingPerfPayload): Promise<TrainingPerfResponse> {
   const response = await fetch(buildApiUrl('/api/training_perf'), {
     method: 'POST',
     headers: {
@@ -53,16 +50,22 @@ export async function saveTrainingPerf(payload: TrainingPerfPayload) {
     body: JSON.stringify(payload),
   });
 
-  const text = await response.text();
-  let json: any;
+  const rawText = await response.text();
+
+  let json: TrainingPerfResponse & { error?: string };
   try {
-    json = text ? JSON.parse(text) : {};
+    json = rawText ? JSON.parse(rawText) : {};
   } catch {
-    throw new Error('Réponse serveur invalide.');
+    throw new Error(`Réponse serveur invalide: ${rawText || '(vide)'}`);
   }
 
   if (!response.ok) {
-    throw new Error(json?.error || `Erreur HTTP ${response.status}`);
+    throw new Error(json?.message || json?.error || `Erreur HTTP ${response.status}`);
   }
+
+  if (!json?.success) {
+    throw new Error(json?.message || json?.error || 'Erreur API');
+  }
+
   return json;
 }
