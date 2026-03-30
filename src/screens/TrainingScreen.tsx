@@ -32,15 +32,45 @@ type ChoiceChipProps<T extends string | number> = {
 function ChoiceChip<T extends string | number>({ value, label, selected, disabled, onPress, accent }: ChoiceChipProps<T>) {
   return (
     <Pressable
-      onPress={() => onPress(value)}
+      onPressIn={() => !disabled && onPress(value)}
       disabled={disabled}
-      style={[
+      hitSlop={10}
+      style={({ pressed }) => [
         styles.choiceChip,
         { borderColor: selected ? accent : 'rgba(255,255,255,0.08)', opacity: disabled ? 0.4 : 1 },
         selected && { backgroundColor: `${accent}22` },
+        pressed && !disabled && styles.choiceChipPressed,
       ]}
     >
       <Text style={[styles.choiceChipText, selected && { color: '#fff' }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+type StopwatchButtonProps = {
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+  textColor: string;
+  backgroundColor: string;
+  borderColor: string;
+};
+
+function StopwatchButton({ label, onPress, disabled, icon, textColor, backgroundColor, borderColor }: StopwatchButtonProps) {
+  return (
+    <Pressable
+      onPressIn={() => !disabled && onPress()}
+      disabled={disabled}
+      hitSlop={18}
+      style={({ pressed }) => [
+        styles.actionBtn,
+        { backgroundColor, borderColor, opacity: disabled ? 0.45 : 1 },
+        pressed && !disabled && styles.actionBtnPressed,
+      ]}
+    >
+      <MaterialCommunityIcons name={icon} size={22} color={textColor} />
+      <Text style={[styles.actionText, { color: textColor }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -69,7 +99,7 @@ export default function TrainingScreen() {
   const [performedAt, setPerformedAt] = useState<string>('');
 
   const startRef = useRef<number | null>(null);
-  const frameRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const distances = useMemo(() => getAvailableDistances(stroke), [stroke]);
   const expectedSplits = useMemo(() => getExpectedSplitDistances(distance, poolLength), [distance, poolLength]);
@@ -80,12 +110,12 @@ export default function TrainingScreen() {
   }, [athletes, search]);
 
   useEffect(() => () => {
-    if (frameRef.current) clearInterval(frameRef.current);
+    if (intervalRef.current) clearInterval(intervalRef.current);
   }, []);
 
   const resetTiming = () => {
-    if (frameRef.current) clearInterval(frameRef.current);
-    frameRef.current = null;
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    intervalRef.current = null;
     startRef.current = null;
     setElapsedMs(0);
     setSplits([]);
@@ -94,10 +124,13 @@ export default function TrainingScreen() {
   };
 
   const start = async () => {
-    if (!poolLength || !stroke || !distance || !startMode || !athleteId) {
+    if (!poolLength || !stroke || !distance || !startMode || !selectedAthlete) {
       Alert.alert('Sélection incomplète', 'Choisis le bassin, la nage, la distance, le départ et l’athlète avant de démarrer.');
       return;
     }
+
+    if (status === 'running') return;
+
     const now = Date.now();
     startRef.current = now;
     setPerformedAt(formatPerformedAt(new Date(now)));
@@ -105,41 +138,47 @@ export default function TrainingScreen() {
     setSplits([]);
     setStatus('running');
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
-    frameRef.current = setInterval(() => {
-      if (!startRef.current) return;
+
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    intervalRef.current = setInterval(() => {
+      if (startRef.current === null) return;
       setElapsedMs(Date.now() - startRef.current);
-    }, 10);
+    }, 30);
   };
 
   const captureSplit = async () => {
-    if (status !== 'running' || !startRef.current) return;
+    if (status !== 'running' || startRef.current === null) return;
     const splitIndex = splits.length;
     const distanceM = expectedSplits[splitIndex];
     if (!distanceM) return;
+
     const timeMs = Date.now() - startRef.current;
     setSplits((prev) => [...prev, { distance_m: distanceM, time_ms: timeMs, order_index: prev.length + 1 }]);
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
   };
 
   const stop = async () => {
-    if (status !== 'running' || !startRef.current) return;
+    if (status !== 'running' || startRef.current === null) return;
+
     const timeMs = Date.now() - startRef.current;
-    if (frameRef.current) clearInterval(frameRef.current);
-    frameRef.current = null;
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    intervalRef.current = null;
     setElapsedMs(timeMs);
     setStatus('stopped');
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
   };
 
   const save = async () => {
-    if (!poolLength || !stroke || !distance || !startMode || !athleteId || status !== 'stopped') {
+    if (!poolLength || !stroke || !distance || !startMode || !selectedAthlete || status !== 'stopped') {
       Alert.alert('Enregistrement impossible', 'Termine une prise chronométrique avant l’enregistrement.');
       return;
     }
+
     setSaving(true);
     try {
       await saveTrainingPerf({
-        athlete_id: athleteId,
+        athlete_id: selectedAthlete.id,
+        athlete_name: selectedAthlete.name,
         stroke_code: stroke,
         distance_m: distance,
         pool_length_m: poolLength,
@@ -148,7 +187,7 @@ export default function TrainingScreen() {
         splits,
         performed_at: performedAt || formatPerformedAt(),
       });
-      Alert.alert('Performance enregistrée', `${selectedAthlete?.label || 'Athlète'} • ${formatMs(elapsedMs)}`);
+      Alert.alert('Performance enregistrée', `${selectedAthlete.label} • ${formatMs(elapsedMs)}`);
       resetTiming();
     } catch (err) {
       Alert.alert('Erreur API', err instanceof Error ? err.message : 'Impossible d’enregistrer la performance.');
@@ -160,13 +199,13 @@ export default function TrainingScreen() {
   const canSplit = status === 'running' && splits.length < expectedSplits.length;
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: palette.background }]}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: palette.background }]}> 
       <StatusBar barStyle="light-content" />
       <LinearGradient colors={[palette.background, palette.backgroundAlt]} style={StyleSheet.absoluteFillObject} />
       <ScrollView contentContainerStyle={styles.container}>
         <View style={styles.header}>
           <CpnLogo variant="full" size={48} />
-          <View style={[styles.liveChip, { borderColor: palette.glow, backgroundColor: `${palette.accent}11` }]}>
+          <View style={[styles.liveChip, { borderColor: palette.glow, backgroundColor: `${palette.accent}11` }]}> 
             <MaterialCommunityIcons name="timer-outline" size={16} color={palette.accent} />
             <Text style={[styles.liveChipText, { color: palette.accent }]}>Training</Text>
           </View>
@@ -205,7 +244,7 @@ export default function TrainingScreen() {
           </View>
 
           <Text style={[styles.stepLabel, { color: palette.textMuted }]}>5. Athlète</Text>
-          <View style={[styles.searchWrap, { borderColor: palette.cardBorder, backgroundColor: palette.surfaceHigh }]}>
+          <View style={[styles.searchWrap, { borderColor: palette.cardBorder, backgroundColor: palette.surfaceHigh }]}> 
             <MaterialCommunityIcons name="account-search-outline" size={18} color={palette.textMuted} />
             <TextInput value={search} onChangeText={setSearch} placeholder="Rechercher un nageur" placeholderTextColor={palette.textMuted} style={[styles.searchInput, { color: palette.text }]} editable={!!startMode} />
           </View>
@@ -222,7 +261,7 @@ export default function TrainingScreen() {
         <View style={[styles.timerCard, { backgroundColor: palette.surface, borderColor: `${palette.accent}44`, shadowColor: palette.accent }]}> 
           <Text style={[styles.timerLabel, { color: palette.textMuted }]}>Chronomètre sportif</Text>
           <Text style={[styles.timerValue, { color: palette.text }]}>{formatMs(elapsedMs)}</Text>
-          <Text style={[styles.timerMeta, { color: palette.textMuted }]}>
+          <Text style={[styles.timerMeta, { color: palette.textMuted }]}> 
             {selectedAthlete ? `${selectedAthlete.label} • ` : ''}
             {stroke ? `${STROKE_LABELS[stroke]} • ` : ''}
             {distance ? `${distance}m • ` : ''}
@@ -230,21 +269,36 @@ export default function TrainingScreen() {
           </Text>
 
           <View style={styles.actionRow}>
-            <Pressable onPress={start} disabled={status === 'running'} style={[styles.actionBtn, { backgroundColor: `${palette.accent}22`, borderColor: `${palette.accent}66`, opacity: status === 'running' ? 0.45 : 1 }]}>
-              <MaterialCommunityIcons name="play" size={20} color={palette.accent} />
-              <Text style={[styles.actionText, { color: palette.accent }]}>Démarrer</Text>
-            </Pressable>
-            <Pressable onPress={captureSplit} disabled={!canSplit} style={[styles.actionBtn, { backgroundColor: 'rgba(255,255,255,0.05)', borderColor: palette.cardBorder, opacity: canSplit ? 1 : 0.45 }]}>
-              <MaterialCommunityIcons name="flag-variant-outline" size={18} color={palette.text} />
-              <Text style={[styles.actionText, { color: palette.text }]}>Intermédiaire</Text>
-            </Pressable>
-            <Pressable onPress={stop} disabled={status !== 'running'} style={[styles.actionBtn, { backgroundColor: 'rgba(255,107,107,0.14)', borderColor: 'rgba(255,107,107,0.4)', opacity: status === 'running' ? 1 : 0.45 }]}>
-              <MaterialCommunityIcons name="stop" size={20} color="#ff6b6b" />
-              <Text style={[styles.actionText, { color: '#ff6b6b' }]}>Arrêter</Text>
-            </Pressable>
+            <StopwatchButton
+              label="Démarrer"
+              onPress={start}
+              disabled={status === 'running'}
+              icon="play"
+              textColor={palette.accent}
+              backgroundColor={`${palette.accent}22`}
+              borderColor={`${palette.accent}66`}
+            />
+            <StopwatchButton
+              label="Split"
+              onPress={captureSplit}
+              disabled={!canSplit}
+              icon="flag-variant-outline"
+              textColor={palette.text}
+              backgroundColor="rgba(255,255,255,0.05)"
+              borderColor={palette.cardBorder}
+            />
+            <StopwatchButton
+              label="Arrêter"
+              onPress={stop}
+              disabled={status !== 'running'}
+              icon="stop"
+              textColor="#ff6b6b"
+              backgroundColor="rgba(255,107,107,0.14)"
+              borderColor="rgba(255,107,107,0.4)"
+            />
           </View>
 
-          <Pressable onPress={resetTiming} style={styles.resetBtn}><Text style={[styles.resetText, { color: palette.textMuted }]}>Réinitialiser</Text></Pressable>
+          <Pressable onPress={resetTiming} hitSlop={12} style={styles.resetBtn}><Text style={[styles.resetText, { color: palette.textMuted }]}>Réinitialiser</Text></Pressable>
         </View>
 
         <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.cardBorder }]}> 
@@ -265,7 +319,7 @@ export default function TrainingScreen() {
             })}
           </View>
 
-          <View style={[styles.summaryCard, { backgroundColor: palette.surfaceHigh, borderColor: palette.cardBorder }]}>
+          <View style={[styles.summaryCard, { backgroundColor: palette.surfaceHigh, borderColor: palette.cardBorder }]}> 
             <Text style={[styles.summaryLine, { color: palette.text }]}>Athlète : <Text style={{ color: palette.accent }}>{selectedAthlete?.label || '—'}</Text></Text>
             <Text style={[styles.summaryLine, { color: palette.text }]}>Nage : <Text style={{ color: palette.accent }}>{stroke ? STROKE_LABELS[stroke] : '—'}</Text></Text>
             <Text style={[styles.summaryLine, { color: palette.text }]}>Format : <Text style={{ color: palette.accent }}>{distance ? `${distance}m` : '—'} / {poolLength ? `${poolLength}m` : '—'} / {startMode || '—'}</Text></Text>
@@ -292,7 +346,8 @@ const styles = StyleSheet.create({
   cardSub: { fontSize: 13, lineHeight: 18 },
   stepLabel: { marginTop: 6, fontSize: 12, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 1 },
   rowWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  choiceChip: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 16, borderWidth: 1, backgroundColor: 'rgba(255,255,255,0.03)' },
+  choiceChip: { paddingHorizontal: 14, paddingVertical: 12, borderRadius: 16, borderWidth: 1, backgroundColor: 'rgba(255,255,255,0.03)' },
+  choiceChipPressed: { transform: [{ scale: 0.98 }] },
   choiceChipText: { color: '#b9ccdd', fontWeight: '700' },
   searchWrap: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 10 },
   searchInput: { flex: 1, fontSize: 15 },
@@ -302,10 +357,11 @@ const styles = StyleSheet.create({
   timerLabel: { fontSize: 12, letterSpacing: 1.6, textTransform: 'uppercase', fontWeight: '800' },
   timerValue: { fontSize: 54, fontWeight: '900', marginTop: 6 },
   timerMeta: { marginTop: 6, fontSize: 13, textAlign: 'center' },
-  actionRow: { flexDirection: 'row', gap: 10, flexWrap: 'wrap', justifyContent: 'center', marginTop: 18 },
-  actionBtn: { minWidth: 100, borderRadius: 18, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 12, alignItems: 'center', gap: 6 },
-  actionText: { fontWeight: '800' },
-  resetBtn: { marginTop: 14, padding: 8 },
+  actionRow: { flexDirection: 'row', gap: 12, flexWrap: 'wrap', justifyContent: 'center', marginTop: 18 },
+  actionBtn: { minWidth: 118, minHeight: 88, borderRadius: 22, borderWidth: 1, paddingHorizontal: 16, paddingVertical: 14, alignItems: 'center', justifyContent: 'center', gap: 8 },
+  actionBtnPressed: { transform: [{ scale: 0.97 }] },
+  actionText: { fontWeight: '800', fontSize: 16 },
+  resetBtn: { marginTop: 14, padding: 10 },
   resetText: { fontWeight: '700' },
   splitList: { gap: 8 },
   emptyLine: { fontSize: 14 },
