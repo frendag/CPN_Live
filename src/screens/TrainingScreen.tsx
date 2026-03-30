@@ -55,21 +55,25 @@ type StopwatchButtonProps = {
   textColor: string;
   backgroundColor: string;
   borderColor: string;
+  fullWidth?: boolean;
 };
 
-function StopwatchButton({ label, onPress, disabled, icon, textColor, backgroundColor, borderColor }: StopwatchButtonProps) {
+function StopwatchButton({ label, onPress, disabled, icon, textColor, backgroundColor, borderColor, fullWidth }: StopwatchButtonProps) {
   return (
     <Pressable
       onPressIn={() => !disabled && onPress()}
+      delayLongPress={0}
       disabled={disabled}
-      hitSlop={18}
+      hitSlop={24}
+      pressRetentionOffset={24}
       style={({ pressed }) => [
         styles.actionBtn,
+        fullWidth && styles.actionBtnFullWidth,
         { backgroundColor, borderColor, opacity: disabled ? 0.45 : 1 },
         pressed && !disabled && styles.actionBtnPressed,
       ]}
     >
-      <MaterialCommunityIcons name={icon} size={22} color={textColor} />
+      <MaterialCommunityIcons name={icon} size={30} color={textColor} />
       <Text style={[styles.actionText, { color: textColor }]}>{label}</Text>
     </Pressable>
   );
@@ -268,37 +272,49 @@ export default function TrainingScreen() {
             {poolLength ? `Bassin ${poolLength}m` : 'Prêt'}
           </Text>
 
-          <View style={styles.actionRow}>
-            <StopwatchButton
-              label="Démarrer"
-              onPress={start}
-              disabled={status === 'running'}
-              icon="play"
-              textColor={palette.accent}
-              backgroundColor={`${palette.accent}22`}
-              borderColor={`${palette.accent}66`}
-            />
-            <StopwatchButton
-              label="Split"
-              onPress={captureSplit}
-              disabled={!canSplit}
-              icon="flag-variant-outline"
-              textColor={palette.text}
-              backgroundColor="rgba(255,255,255,0.05)"
-              borderColor={palette.cardBorder}
-            />
-            <StopwatchButton
-              label="Arrêter"
-              onPress={stop}
-              disabled={status !== 'running'}
-              icon="stop"
-              textColor="#ff6b6b"
-              backgroundColor="rgba(255,107,107,0.14)"
-              borderColor="rgba(255,107,107,0.4)"
-            />
-          </View>
+          <View style={styles.actionsWrap}>
+            <View style={styles.actionRow}>
+              <StopwatchButton
+                label="DÉMARRER"
+                onPress={start}
+                disabled={status === 'running'}
+                icon="play"
+                textColor={palette.accent}
+                backgroundColor={`${palette.accent}22`}
+                borderColor={`${palette.accent}66`}
+              />
+              <StopwatchButton
+                label="SPLIT"
+                onPress={captureSplit}
+                disabled={!canSplit}
+                icon="flag-variant-outline"
+                textColor={palette.text}
+                backgroundColor="rgba(255,255,255,0.05)"
+                borderColor={palette.cardBorder}
+              />
+            </View>
 
-          <Pressable onPress={resetTiming} hitSlop={12} style={styles.resetBtn}><Text style={[styles.resetText, { color: palette.textMuted }]}>Réinitialiser</Text></Pressable>
+            <View style={styles.actionRow}>
+              <StopwatchButton
+                label="ARRÊTER"
+                onPress={stop}
+                disabled={status !== 'running'}
+                icon="stop"
+                textColor="#ff6b6b"
+                backgroundColor="rgba(255,107,107,0.14)"
+                borderColor="rgba(255,107,107,0.4)"
+              />
+              <StopwatchButton
+                label="RESET"
+                onPress={resetTiming}
+                disabled={status === 'running'}
+                icon="restart"
+                textColor={palette.textMuted}
+                backgroundColor="rgba(255,255,255,0.04)"
+                borderColor={palette.cardBorder}
+              />
+            </View>
+          </View>
         </View>
 
         <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.cardBorder }]}> 
@@ -357,12 +373,12 @@ const styles = StyleSheet.create({
   timerLabel: { fontSize: 12, letterSpacing: 1.6, textTransform: 'uppercase', fontWeight: '800' },
   timerValue: { fontSize: 54, fontWeight: '900', marginTop: 6 },
   timerMeta: { marginTop: 6, fontSize: 13, textAlign: 'center' },
-  actionRow: { flexDirection: 'row', gap: 12, flexWrap: 'wrap', justifyContent: 'center', marginTop: 18 },
-  actionBtn: { minWidth: 118, minHeight: 88, borderRadius: 22, borderWidth: 1, paddingHorizontal: 16, paddingVertical: 14, alignItems: 'center', justifyContent: 'center', gap: 8 },
+  actionsWrap: { marginTop: 22, marginBottom: 6, alignItems: 'center', width: '100%' },
+  actionRow: { flexDirection: 'row', gap: 14, flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', width: '100%', marginTop: 8 },
+  actionBtn: { minWidth: 148, minHeight: 104, borderRadius: 28, borderWidth: 2, paddingHorizontal: 20, paddingVertical: 18, alignItems: 'center', justifyContent: 'center', gap: 10 },
+  actionBtnFullWidth: { width: '100%' },
   actionBtnPressed: { transform: [{ scale: 0.97 }] },
-  actionText: { fontWeight: '800', fontSize: 16 },
-  resetBtn: { marginTop: 14, padding: 10 },
-  resetText: { fontWeight: '700' },
+  actionText: { fontWeight: '900', fontSize: 20, letterSpacing: 0.8 },
   splitList: { gap: 8 },
   emptyLine: { fontSize: 14 },
   splitRow: { flexDirection: 'row', justifyContent: 'space-between', borderWidth: 1, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12 },
