@@ -20,10 +20,12 @@ export function useTrainingAthletes() {
       const rawAthletes = Array.isArray(json.athletes) ? json.athletes : [];
       const normalized = rawAthletes
         .map((entry, index) => {
-          if (typeof entry === 'string') return { id: index + 1, label: entry };
+          if (typeof entry === 'string') {
+            return { id: index + 1, label: entry, name: entry };
+          }
           const id = Number(entry.id ?? entry.athlete_id ?? index + 1);
-          const label = entry.label ?? entry.nom ?? entry.name ?? `Athlète ${index + 1}`;
-          return { id, label };
+          const label = String(entry.label ?? entry.nom ?? entry.name ?? `Athlète ${index + 1}`);
+          return { id, label, name: label };
         })
         .sort((a, b) => a.label.localeCompare(b.label, 'fr', { sensitivity: 'base' }));
       setAthletes(normalized);
