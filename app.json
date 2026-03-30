@@ -32,9 +32,6 @@
         "backgroundColor": "#001a33"
       },
       "package": "fr.cpnnatation.competlive",
-      "compileSdkVersion": 34,
-      "targetSdkVersion": 34,
-      "minSdkVersion": 23,
       "versionCode": 2,
       "permissions": [
         "RECEIVE_BOOT_COMPLETED",
