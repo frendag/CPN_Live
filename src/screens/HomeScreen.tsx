@@ -138,14 +138,18 @@ function NavTab({ label, active, onPress }: { label: string; active: boolean; on
 }
 
 // ─── Main HomeScreen ──────────────────────────────────────────────────────────
-export default function HomeScreen() {
+interface HomeScreenProps {
+  initialSection?: AppSection;
+}
+
+export default function HomeScreen({ initialSection = 'competition' }: HomeScreenProps) {
   const {
     competitions, selectedCompetition, selectedCompetitionId,
     programme, resultats, loadingList, loadingDetail, error,
     lastRefresh, loadCompetitions, loadCompetition, refreshResultats,
   } = useCompetV2();
 
-  const [section, setSection]           = useState<AppSection>('competition');
+  const [section, setSection]           = useState<AppSection>(initialSection);
   const [tab, setTab]                   = useState<CompetitionTab>('programme');
   const [searchCompet, setSearchCompet] = useState('');
   const [searchAthlete, setSearchAthlete] = useState('');
