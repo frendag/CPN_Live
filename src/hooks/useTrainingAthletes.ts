@@ -1,43 +1,57 @@
+/**
+ * useTrainingAthletes.ts  — v2
+ * Branché sur le même singleton athletesCache que useAthleteData.
+ * → Zéro appel réseau supplémentaire si useAthleteData a déjà chargé la liste.
+ * → Liste disponible instantanément depuis AsyncStorage dès le 2e lancement.
+ */
 import { useCallback, useEffect, useState } from 'react';
-import { buildApiUrl } from '../utils/api';
 import { TrainingAthlete } from '../utils/trainingTypes';
+import { CachedAthlete, loadAthletes, subscribeAthletes } from '../utils/athletesCache';
 
-interface AthletesResponse {
-  athletes?: Array<string | { id?: number; athlete_id?: number; nom?: string; name?: string; label?: string }>;
+function toTrainingAthlete(a: CachedAthlete): TrainingAthlete {
+  return { id: a.id, label: a.label, name: a.name };
 }
 
 export function useTrainingAthletes() {
   const [athletes, setAthletes] = useState<TrainingAthlete[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState<string | null>(null);
 
-  const loadAthletes = useCallback(async () => {
+  const applyList = useCallback((cached: CachedAthlete[]) => {
+    setAthletes(cached.map(toTrainingAthlete));
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+
+    // Souscription aux mises à jour du cache (refresh en fond)
+    const unsub = subscribeAthletes((cached) => {
+      if (mounted) applyList(cached);
+    });
+
+    // Charge depuis cache/réseau
     setLoading(true);
+    loadAthletes()
+      .then((cached) => { if (mounted) applyList(cached); })
+      .catch((err)   => { if (mounted) setError(err instanceof Error ? err.message : 'Erreur chargement athlètes.'); })
+      .finally(()    => { if (mounted) setLoading(false); });
+
+    return () => { mounted = false; unsub(); };
+  }, [applyList]);
+
+  // Reload manuel : force le réseau
+  const reload = useCallback(async () => {
+    setLoading(true);
+    setError(null);
     try {
-      const response = await fetch(buildApiUrl('/api/athletes'), { headers: { Accept: 'application/json' } });
-      const text = await response.text();
-      const json = JSON.parse(text) as AthletesResponse;
-      const rawAthletes = Array.isArray(json.athletes) ? json.athletes : [];
-      const normalized = rawAthletes
-        .map((entry, index) => {
-          if (typeof entry === 'string') {
-            return { id: index + 1, label: entry, name: entry };
-          }
-          const id = Number(entry.id ?? entry.athlete_id ?? index + 1);
-          const label = String(entry.label ?? entry.nom ?? entry.name ?? `Athlète ${index + 1}`);
-          return { id, label, name: label };
-        })
-        .sort((a, b) => a.label.localeCompare(b.label, 'fr', { sensitivity: 'base' }));
-      setAthletes(normalized);
-      setError(null);
+      const cached = await loadAthletes(true);
+      applyList(cached);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Impossible de charger les athlètes.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [applyList]);
 
-  useEffect(() => { loadAthletes(); }, [loadAthletes]);
-
-  return { athletes, loading, error, reload: loadAthletes };
+  return { athletes, loading, error, reload };
 }
