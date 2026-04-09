@@ -26,7 +26,7 @@ import { useAppTheme } from '../utils/theme';
 import { buildApiUrl } from '../utils/api';
 import { formatMs } from '../utils/training';
 import { PoolLength, StrokeCode } from '../utils/trainingTypes';
-import { ChartWebView } from './ChartWebView';
+import ChartWebView from './ChartWebView';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -75,17 +75,17 @@ function msToSec(ms: number): number {
 
 function trendSymbol(entries: TrainingEntry[]): { label: string; color: string; icon: string } {
   if (entries.length < 2)
-    return { label: 'Insuffisant', color: '#6a8ba5', icon: 'minus' };
+    return { label: 'Insuffisant', color: '#6a8ba5', icon: 'minus-circle-outline' };
   const last3 = entries.slice(-3).map((e) => e.final_time_ms);
   const avg = last3.reduce((a, b) => a + b, 0) / last3.length;
   const prev3 = entries.slice(-6, -3);
   if (prev3.length === 0)
-    return { label: 'Insuffisant', color: '#6a8ba5', icon: 'minus' };
+    return { label: 'Insuffisant', color: '#6a8ba5', icon: 'minus-circle-outline' };
   const prevAvg = prev3.reduce((a, b) => a + b.final_time_ms, 0) / prev3.length;
   const delta = ((avg - prevAvg) / prevAvg) * 100;
   if (delta < -1) return { label: `${Math.abs(delta).toFixed(1)}% ↓`, color: '#00c9a7', icon: 'trending-down' };
   if (delta > 1) return { label: `${delta.toFixed(1)}% ↑`, color: '#ff6b6b', icon: 'trending-up' };
-  return { label: 'Stable', color: '#ffd166', icon: 'minus' };
+  return { label: 'Stable', color: '#ffd166', icon: 'minus-circle-outline' };
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -165,14 +165,15 @@ export default function TrainingSuivi({ onBack }: Props) {
     return athletes.filter((a) => !q || a.label.toLowerCase().includes(q));
   }, [athletes, search]);
 
-  // Load entries when athlete changes
-  const loadEntries = useCallback(async (id: number) => {
+  // Load entries when athlete changes — on requête par nom (plus stable que l'id positional)
+  const loadEntries = useCallback(async (name: string) => {
     setLoadingEntries(true);
     setEntriesError(null);
     try {
-      const res = await fetch(buildApiUrl(`/api/training_perf/athlete/${id}`), {
-        headers: { Accept: 'application/json' },
-      });
+      const res = await fetch(
+        buildApiUrl(`/api/training_perf/athlete_name/${encodeURIComponent(name)}`),
+        { headers: { Accept: 'application/json' } },
+      );
       const text = await res.text();
       const json: AthleteTrainingResponse = JSON.parse(text);
       setEntries(Array.isArray(json.entries) ? json.entries : []);
@@ -185,9 +186,9 @@ export default function TrainingSuivi({ onBack }: Props) {
   }, []);
 
   useEffect(() => {
-    if (athleteId !== null) loadEntries(athleteId);
+    if (selectedAthlete !== null) loadEntries(selectedAthlete.name);
     else setEntries([]);
-  }, [athleteId, loadEntries]);
+  }, [selectedAthlete, loadEntries]);
 
   // Derived: available filter values
   const availableStrokes = useMemo(() => {
