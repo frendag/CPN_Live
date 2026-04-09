@@ -225,39 +225,96 @@ export default function TrainingSuivi({ onBack }: Props) {
   const trend = useMemo(() => trendSymbol(filtered), [filtered]);
   const sessionCount = new Set(filtered.map((e) => e.performed_at.slice(0, 10))).size;
 
-  // Chart config
+  // ── Graphique : une courbe par combinaison nage+bassin ──────────────────────
+  //
+  // Stratégie : on regroupe les entrées filtrées par clé "NL-25m", "DOS-50m", etc.
+  // Chaque groupe devient un dataset Chart.js distinct avec sa propre couleur.
+  // L'axe X est une union ordonnée de toutes les dates présentes.
+  // Les points manquants pour un groupe sur une date donnée → null (pas de tracé).
+  //
   const chartConfig = useMemo(() => {
     if (filtered.length === 0) return null;
-    const labels = filtered.map((e) => dateLabel(e.performed_at));
-    const data = filtered.map((e) => msToSec(e.final_time_ms));
-    const strokeKey = filterStroke || (availableStrokes[0] ?? 'NL');
-    const color = STROKE_COLORS[strokeKey as StrokeCode] ?? palette.accent;
+
+    // 1. Toutes les dates uniques triées
+    const allDates = Array.from(
+      new Set(filtered.map((e) => e.performed_at.slice(0, 10)))
+    ).sort();
+
+    // 2. Grouper par nage+bassin
+    type GroupKey = string; // ex. "NL-25m"
+    const groups = new Map<GroupKey, typeof filtered>();
+    for (const e of filtered) {
+      const key = `${e.stroke_code}-${e.pool_length_m}m`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(e);
+    }
+
+    // 3. Couleurs : on mélange la couleur de nage avec une nuance de bassin
+    const POOL_OPACITY: Record<number, string> = { 25: 'CC', 50: 'FF' };
+    const POOL_DASH: Record<number, number[]>  = { 25: [5, 3], 50: [] };
+
+    const datasets = Array.from(groups.entries()).map(([key, entries]) => {
+      const [strokeCode, poolStr] = key.split('-');
+      const poolLen = parseInt(poolStr) as PoolLength;
+      const baseColor = STROKE_COLORS[strokeCode as StrokeCode] ?? '#00c9a7';
+      const opacity   = POOL_OPACITY[poolLen] ?? 'FF';
+      const color     = baseColor;
+
+      // Pour chaque date de l'axe X, trouver le meilleur temps du groupe ce jour
+      const dataPoints = allDates.map((date) => {
+        const dayEntries = entries.filter((e) => e.performed_at.startsWith(date));
+        if (dayEntries.length === 0) return null;
+        const best = dayEntries.reduce((b, e) => e.final_time_ms < b.final_time_ms ? e : b);
+        return msToSec(best.final_time_ms);
+      });
+
+      const label = `${STROKE_LABELS[strokeCode as StrokeCode] ?? strokeCode} ${poolLen}m`;
+
+      return {
+        label,
+        data: dataPoints,
+        borderColor: color,
+        backgroundColor: `${color}18`,
+        pointBackgroundColor: color,
+        pointRadius: 5,
+        pointHoverRadius: 7,
+        borderDash: POOL_DASH[poolLen] ?? [],
+        tension: 0.35,
+        fill: false,
+        spanGaps: false,
+      };
+    });
+
+    // 4. Labels : dates formatées DD/MM
+    const labels = allDates.map((d) => {
+      const [, m, day] = d.split('-');
+      return `${day}/${m}`;
+    });
+
+    const multiSeries = datasets.length > 1;
+
     return {
       type: 'line',
-      data: {
-        labels,
-        datasets: [
-          {
-            label: filterStroke ? STROKE_LABELS[filterStroke] : 'Temps (s)',
-            data,
-            borderColor: color,
-            backgroundColor: `${color}22`,
-            pointBackgroundColor: color,
-            pointRadius: 5,
-            pointHoverRadius: 7,
-            tension: 0.35,
-            fill: true,
-          },
-        ],
-      },
+      data: { labels, datasets },
       options: {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
-          legend: { display: false },
+          legend: {
+            display: multiSeries,
+            position: 'top',
+            labels: {
+              color: '#a8c2d8',
+              font: { size: 10 },
+              boxWidth: 12,
+              padding: 10,
+              usePointStyle: true,
+            },
+          },
           tooltip: {
             callbacks: {
-              label: (ctx: any) => ` ${ctx.parsed.y.toFixed(2)} s`,
+              label: (ctx: any) =>
+                ctx.raw !== null ? ` ${ctx.dataset.label} : ${ctx.parsed.y.toFixed(2)}s` : '',
             },
           },
         },
@@ -273,12 +330,12 @@ export default function TrainingSuivi({ onBack }: Props) {
               callback: (v: number) => `${v.toFixed(1)}s`,
             },
             grid: { color: 'rgba(255,255,255,0.06)' },
-            reverse: true, // lower = better
+            reverse: true,
           },
         },
       },
     };
-  }, [filtered, filterStroke, availableStrokes, palette.accent]);
+  }, [filtered]);
 
   const hasAthlete = selectedAthlete !== null;
   const hasData = filtered.length > 0;
@@ -425,7 +482,7 @@ export default function TrainingSuivi({ onBack }: Props) {
 
                       {chartConfig && (
                         <View style={styles.chartWrap}>
-                          <ChartWebView config={chartConfig} height={240} />
+                          <ChartWebView config={chartConfig} height={280} />
                         </View>
                       )}
 
