@@ -1,2 +1,2 @@
-import HomeScreen from '../src/screens/HomeScreen';
-export default HomeScreen;
+import LandingScreen from '../src/screens/LandingScreen';
+export default LandingScreen;
