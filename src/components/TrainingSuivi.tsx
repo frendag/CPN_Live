@@ -3,7 +3,7 @@
  * Tableau de bord de suivi d'un athlète en entraînement.
  * - Sélecteur athlète (search + chips)
  * - 3 KPI : meilleur temps, dernière séance, tendance
- * - Graphique Chart.js (évolution des temps) via ChartWebView
+ * - Graphique victory-native (évolution des temps)
  * - Filtres : nage · bassin · distance
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -16,7 +16,9 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from 'react-native';
+import { VictoryAxis, VictoryChart, VictoryLine, VictoryScatter } from 'victory-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -26,7 +28,6 @@ import { useAppTheme } from '../utils/theme';
 import { buildApiUrl } from '../utils/api';
 import { formatMs } from '../utils/training';
 import { PoolLength, StrokeCode } from '../utils/trainingTypes';
-import ChartWebView from './ChartWebView';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -137,6 +138,57 @@ function KpiCard({
   );
 }
 
+// ─── Training line chart (victory-native) ────────────────────────────────────
+interface VictoryConfig {
+  labels: string[];
+  datasets: Array<{ label: string; color: string; dashed: boolean; points: { x: number; y: number }[] }>;
+  yMin: number;
+  yMax: number;
+}
+
+function TrainingLineChart({ config }: { config: VictoryConfig }) {
+  const { width } = useWindowDimensions();
+  const axStyle = {
+    tickLabels: { fill: '#6a8ba5', fontSize: 10 },
+    grid:       { stroke: 'rgba(255,255,255,0.06)' },
+    axis:       { stroke: 'rgba(255,255,255,0.06)' },
+  };
+
+  return (
+    <VictoryChart
+      width={width - 72}
+      height={280}
+      padding={{ top: 20, bottom: 50, left: 55, right: 20 }}
+      domain={{ y: [config.yMax, config.yMin] }}
+    >
+      <VictoryAxis
+        tickFormat={(i: number) => config.labels[Math.round(i)] ?? ''}
+        style={{ ...axStyle, tickLabels: { fill: '#6a8ba5', fontSize: 9, angle: -45 } }}
+      />
+      <VictoryAxis dependentAxis
+        tickFormat={(v: number) => `${v.toFixed(2)}s`}
+        style={axStyle}
+      />
+      {config.datasets.map((ds, i) => (
+        <VictoryLine
+          key={i}
+          data={ds.points}
+          style={{ data: { stroke: ds.color, strokeWidth: 2, strokeDasharray: ds.dashed ? ([5, 3] as any) : undefined } }}
+          interpolation="catmullRom"
+        />
+      ))}
+      {config.datasets.map((ds, i) => (
+        <VictoryScatter
+          key={`s${i}`}
+          data={ds.points}
+          size={5}
+          style={{ data: { fill: ds.color, stroke: '#071829', strokeWidth: 1.5 } }}
+        />
+      ))}
+    </VictoryChart>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 type Props = {
@@ -225,116 +277,53 @@ export default function TrainingSuivi({ onBack }: Props) {
   const trend = useMemo(() => trendSymbol(filtered), [filtered]);
   const sessionCount = new Set(filtered.map((e) => e.performed_at.slice(0, 10))).size;
 
-  // ── Graphique : une courbe par combinaison nage+bassin ──────────────────────
-  //
-  // Stratégie : on regroupe les entrées filtrées par clé "NL-25m", "DOS-50m", etc.
-  // Chaque groupe devient un dataset Chart.js distinct avec sa propre couleur.
-  // L'axe X est une union ordonnée de toutes les dates présentes.
-  // Les points manquants pour un groupe sur une date donnée → null (pas de tracé).
-  //
-  const chartConfig = useMemo(() => {
+  // ── Données graphique : une courbe par combinaison nage+bassin ───────────────
+  const victoryConfig = useMemo(() => {
     if (filtered.length === 0) return null;
 
-    // 1. Toutes les dates uniques triées
     const allDates = Array.from(
       new Set(filtered.map((e) => e.performed_at.slice(0, 10)))
     ).sort();
 
-    // 2. Grouper par nage+bassin
-    type GroupKey = string; // ex. "NL-25m"
-    const groups = new Map<GroupKey, typeof filtered>();
+    const labels = allDates.map((d) => {
+      const [, m, day] = d.split('-');
+      return `${day}/${m}`;
+    });
+
+    const groups = new Map<string, typeof filtered>();
     for (const e of filtered) {
       const key = `${e.stroke_code}-${e.pool_length_m}m`;
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key)!.push(e);
     }
 
-    // 3. Couleurs : on mélange la couleur de nage avec une nuance de bassin
-    const POOL_OPACITY: Record<number, string> = { 25: 'CC', 50: 'FF' };
-    const POOL_DASH: Record<number, number[]>  = { 25: [5, 3], 50: [] };
-
     const datasets = Array.from(groups.entries()).map(([key, entries]) => {
       const [strokeCode, poolStr] = key.split('-');
       const poolLen = parseInt(poolStr) as PoolLength;
-      const baseColor = STROKE_COLORS[strokeCode as StrokeCode] ?? '#00c9a7';
-      const opacity   = POOL_OPACITY[poolLen] ?? 'FF';
-      const color     = baseColor;
+      const color = STROKE_COLORS[strokeCode as StrokeCode] ?? '#00c9a7';
 
-      // Pour chaque date de l'axe X, trouver le meilleur temps du groupe ce jour
-      const dataPoints = allDates.map((date) => {
-        const dayEntries = entries.filter((e) => e.performed_at.startsWith(date));
-        if (dayEntries.length === 0) return null;
-        const best = dayEntries.reduce((b, e) => e.final_time_ms < b.final_time_ms ? e : b);
-        return msToSec(best.final_time_ms);
-      });
-
-      const label = `${STROKE_LABELS[strokeCode as StrokeCode] ?? strokeCode} ${poolLen}m`;
+      const points = allDates
+        .map((date, i) => {
+          const dayEntries = entries.filter((e) => e.performed_at.startsWith(date));
+          if (dayEntries.length === 0) return null;
+          const best = dayEntries.reduce((b, e) => e.final_time_ms < b.final_time_ms ? e : b);
+          return { x: i, y: msToSec(best.final_time_ms) };
+        })
+        .filter((p): p is { x: number; y: number } => p !== null);
 
       return {
-        label,
-        data: dataPoints,
-        borderColor: color,
-        backgroundColor: `${color}18`,
-        pointBackgroundColor: color,
-        pointRadius: 5,
-        pointHoverRadius: 7,
-        borderDash: POOL_DASH[poolLen] ?? [],
-        tension: 0.35,
-        fill: false,
-        spanGaps: false,
+        label: `${STROKE_LABELS[strokeCode as StrokeCode] ?? strokeCode} ${poolLen}m`,
+        color,
+        dashed: poolLen === 25,
+        points,
       };
     });
 
-    // 4. Labels : dates formatées DD/MM
-    const labels = allDates.map((d) => {
-      const [, m, day] = d.split('-');
-      return `${day}/${m}`;
-    });
+    const allY = datasets.flatMap((d) => d.points.map((p) => p.y));
+    if (allY.length === 0) return null;
+    const pad = (Math.max(...allY) - Math.min(...allY)) * 0.12 || 1;
 
-    const multiSeries = datasets.length > 1;
-
-    return {
-      type: 'line',
-      data: { labels, datasets },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            display: multiSeries,
-            position: 'top',
-            labels: {
-              color: '#a8c2d8',
-              font: { size: 10 },
-              boxWidth: 12,
-              padding: 10,
-              usePointStyle: true,
-            },
-          },
-          tooltip: {
-            callbacks: {
-              label: (ctx: any) =>
-                ctx.raw !== null ? ` ${ctx.dataset.label} : ${ctx.parsed.y.toFixed(2)}s` : '',
-            },
-          },
-        },
-        scales: {
-          x: {
-            ticks: { color: '#6a8ba5', maxRotation: 45, font: { size: 10 } },
-            grid: { color: 'rgba(255,255,255,0.05)' },
-          },
-          y: {
-            ticks: {
-              color: '#6a8ba5',
-              font: { size: 10 },
-              callback: (v: number) => `${v.toFixed(1)}s`,
-            },
-            grid: { color: 'rgba(255,255,255,0.06)' },
-            reverse: true,
-          },
-        },
-      },
-    };
+    return { labels, datasets, yMin: Math.min(...allY) - pad, yMax: Math.max(...allY) + pad };
   }, [filtered]);
 
   const hasAthlete = selectedAthlete !== null;
@@ -480,9 +469,9 @@ export default function TrainingSuivi({ onBack }: Props) {
                         {filterDist ? ` · ${filterDist}m` : ''}
                       </Text>
 
-                      {chartConfig && (
+                      {victoryConfig && (
                         <View style={styles.chartWrap}>
-                          <ChartWebView config={chartConfig} height={280} />
+                          <TrainingLineChart config={victoryConfig} />
                         </View>
                       )}
 

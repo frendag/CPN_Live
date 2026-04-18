@@ -1,16 +1,12 @@
 /**
- * AthleteCharts.tsx  — v2
- * Graphiques de suivi athlète via Chart.js dans des WebViews inline.
- * Fidèle à la version web (app.py) :
- *   1. Évolution des points  (bar + line)       → données `evo`
- *   2. Suivi des temps par épreuve (line + proj) → données `evo_temps`
- *   3. Fréquence d'activité (bar)               → données `freq`
+ * AthleteCharts.tsx  — v3
+ * Migration vers victory-native (SVG natif) — supprime les 3 WebViews Chart.js.
  */
 import React, { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { VictoryAxis, VictoryBar, VictoryChart, VictoryLine, VictoryScatter } from 'victory-native';
 import { COLORS } from '../utils/constants';
 import { AthleteEvolutionRow } from '../utils/types';
-import ChartWebView from './ChartWebView';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface EvoTempsEntry {
@@ -31,7 +27,7 @@ interface Props {
   freq?:      FreqRow[];
 }
 
-// ─── Couleurs nage (identiques au web) ───────────────────────────────────────
+// ─── Couleurs nage ────────────────────────────────────────────────────────────
 const NC: Record<string, string> = {
   NL:  '#5ab4e8',
   Dos: '#00c9a7',
@@ -44,6 +40,13 @@ function secToStr(s: number): string {
   const m = Math.floor(s / 60);
   return m > 0 ? `${m}:${(s % 60).toFixed(2).padStart(5, '0')}` : s.toFixed(2);
 }
+
+// ─── Styles axes partagés ─────────────────────────────────────────────────────
+const axisStyle = {
+  tickLabels: { fill: '#6a8ba5', fontSize: 10 },
+  grid:       { stroke: 'rgba(26,52,84,0.6)' },
+  axis:       { stroke: 'rgba(26,52,84,0.6)' },
+};
 
 // ─── Section repliable ────────────────────────────────────────────────────────
 function ChartSection({
@@ -77,278 +80,170 @@ function StatBox({ label, value, color }: { label: string; value: string | numbe
   );
 }
 
-// ─── Config Chart.js : Évolution points ──────────────────────────────────────
-function buildEvoConfig(evo: AthleteEvolutionRow[]) {
-  return {
-    type: 'bar',
-    data: {
-      labels: evo.map(d => d.Annee),
-      datasets: [
-        {
-          type: 'line',
-          label: 'Points moyens',
-          data: evo.map(d => d.moy),
-          borderColor: '#00c9a7',
-          backgroundColor: 'rgba(0,201,167,0.12)',
-          borderWidth: 2.5,
-          pointRadius: 5,
-          pointBackgroundColor: '#00c9a7',
-          pointBorderColor: '#0d2035',
-          pointBorderWidth: 1.5,
-          fill: true,
-          tension: 0.3,
-          yAxisID: 'y1',
-          order: 0,
-        },
-        {
-          type: 'line',
-          label: 'Points max',
-          data: evo.map(d => d.maxi),
-          borderColor: 'rgba(255,209,102,0.6)',
-          backgroundColor: 'transparent',
-          borderWidth: 1.5,
-          borderDash: [5, 3],
-          pointRadius: 3,
-          tension: 0.3,
-          yAxisID: 'y1',
-          order: 0,
-        },
-        {
-          type: 'bar',
-          label: 'Nb performances',
-          data: evo.map(d => d.nb),
-          backgroundColor: evo.map((_, i) =>
-            i === evo.length - 1 ? 'rgba(255,209,102,0.55)' : 'rgba(29,111,164,0.45)'
-          ),
-          borderColor: evo.map((_, i) =>
-            i === evo.length - 1 ? '#ffd166' : '#1d6fa4'
-          ),
-          borderWidth: 1,
-          borderRadius: 4,
-          yAxisID: 'y2',
-          order: 1,
-        },
-      ],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: { duration: 600 },
-      plugins: {
-        legend: {
-          position: 'top',
-          labels: { color: '#a8c2d8', font: { size: 10 }, boxWidth: 12, padding: 10 },
-        },
-        tooltip: {
-          backgroundColor: '#0d2035',
-          borderColor: '#1a3454',
-          borderWidth: 1,
-          titleColor: '#e8f0f8',
-          bodyColor: '#a8c2d8',
-          callbacks: {
-            afterBody: (ctx: any[]) => {
-              const d = evo[ctx[0].dataIndex];
-              if (d?.delta && d.delta !== 0) {
-                const s = d.delta > 0 ? '▲' : '▼';
-                return [`Progression : ${s} ${d.delta > 0 ? '+' : ''}${d.delta} pts`];
-              }
-              return [];
-            },
+// ─── Graphique 1 : Évolution des points (Bar + Line) ─────────────────────────
+function EvoChart({ evo }: { evo: AthleteEvolutionRow[] }) {
+  const { width } = useWindowDimensions();
+  const chartWidth = width - 48;
+  const maxMoy = Math.max(...evo.map(d => d.moy));
+  const maxNb  = Math.max(...evo.map(d => d.nb));
+  // Barres mises à l'échelle pour cohabiter visuellement avec les lignes de points
+  const barData = evo.map((d, i) => ({
+    x: String(d.Annee),
+    y: (d.nb / maxNb) * maxMoy * 0.35,
+    isLast: i === evo.length - 1,
+  }));
+
+  return (
+    <VictoryChart
+      width={chartWidth}
+      height={220}
+      padding={{ top: 20, bottom: 40, left: 50, right: 20 }}
+      domainPadding={{ x: 20 }}
+    >
+      <VictoryAxis style={axisStyle} />
+      <VictoryAxis dependentAxis style={axisStyle} />
+      <VictoryBar
+        data={barData}
+        style={{
+          data: {
+            fill:        ({ datum }: any) => datum.isLast ? 'rgba(255,209,102,0.55)' : 'rgba(29,111,164,0.45)',
+            stroke:      ({ datum }: any) => datum.isLast ? '#ffd166' : '#1d6fa4',
+            strokeWidth: 1,
           },
-        },
-      },
-      scales: {
-        x: {
-          ticks: { color: '#6a8ba5', font: { size: 10 } },
-          grid: { color: 'rgba(26,52,84,0.6)' },
-        },
-        y1: {
-          position: 'left',
-          title: { display: true, text: 'Points', color: '#6a8ba5', font: { size: 10 } },
-          ticks: { color: '#6a8ba5', font: { size: 10 } },
-          grid: { color: 'rgba(26,52,84,0.6)' },
-          beginAtZero: false,
-        },
-        y2: {
-          position: 'right',
-          title: { display: true, text: 'Perfs', color: '#6a8ba5', font: { size: 10 } },
-          ticks: { color: '#6a8ba5', font: { size: 10 } },
-          grid: { drawOnChartArea: false },
-          beginAtZero: true,
-        },
-      },
-    },
-  };
+        }}
+        cornerRadius={{ top: 4 }}
+      />
+      <VictoryLine
+        data={evo.map(d => ({ x: String(d.Annee), y: d.moy }))}
+        style={{ data: { stroke: '#00c9a7', strokeWidth: 2.5 } }}
+        interpolation="catmullRom"
+      />
+      <VictoryScatter
+        data={evo.map(d => ({ x: String(d.Annee), y: d.moy }))}
+        size={5}
+        style={{ data: { fill: '#00c9a7', stroke: '#0d2035', strokeWidth: 1.5 } }}
+      />
+      <VictoryLine
+        data={evo.map(d => ({ x: String(d.Annee), y: d.maxi }))}
+        style={{ data: { stroke: 'rgba(255,209,102,0.6)', strokeWidth: 1.5, strokeDasharray: [5, 3] as any } }}
+        interpolation="catmullRom"
+      />
+    </VictoryChart>
+  );
 }
 
-// ─── Config Chart.js : Suivi temps ───────────────────────────────────────────
-function buildTempsConfig(ep: EvoTempsEntry) {
+// ─── Graphique 2 : Suivi des temps (Line + Projection) ───────────────────────
+function TempsChart({ ep }: { ep: EvoTempsEntry }) {
+  const { width } = useWindowDimensions();
+  const chartWidth = width - 48;
   const col = ep.color || NC[ep.nage] || '#1d6fa4';
+
   const n = ep.sec.length;
   const projLabels = ep.proj.map((_, i) => `Proj.+${i + 1}`);
-  const allLabels = [...ep.dates, ...projLabels];
-  const realData  = [...ep.sec,  ...Array(projLabels.length).fill(null)];
-  const projData  = [...Array(n - 1).fill(null), ep.sec[n - 1], ...ep.proj];
+  const allLabels  = [...ep.dates, ...projLabels];
 
-  // Couleur points selon type compétition (INT rouge, NAT orange, autre = couleur nage)
-  const ptColors = ep.comp.map(c =>
-    c === '[INT]' ? '#ff6b6b' : c === '[NAT]' ? '#ffa748' : col
-  );
-
-  const datasets: any[] = [
-    {
-      label: 'Performances',
-      data: realData,
-      borderColor: col,
-      backgroundColor: col + '18',
-      borderWidth: 2.5,
-      pointRadius: 6,
-      pointBackgroundColor: ptColors,
-      pointBorderColor: '#0d2035',
-      pointBorderWidth: 1.5,
-      fill: true,
-      tension: 0.3,
-      spanGaps: false,
-    },
+  const realData = ep.sec.map((y, i) => ({ x: i, y, comp: ep.comp[i] }));
+  const projData = [
+    { x: n - 1, y: ep.sec[n - 1] },
+    ...ep.proj.map((y, i) => ({ x: n + i, y })),
   ];
 
-  if (ep.proj.length > 0) {
-    datasets.push({
-      label: 'Tendance / Projection',
-      data: projData,
-      borderColor: col + '80',
-      backgroundColor: 'transparent',
-      borderWidth: 2,
-      borderDash: [8, 4],
-      pointRadius: 4,
-      pointStyle: 'triangle',
-      pointBackgroundColor: col + '80',
-      tension: 0.3,
-      spanGaps: false,
-    });
-  }
+  const allY   = [...ep.sec, ...(ep.proj.length ? ep.proj : [])];
+  const minY   = Math.min(...allY);
+  const maxY   = Math.max(...allY);
+  const pad    = (maxY - minY) * 0.12 || 1;
 
-  return {
-    type: 'line',
-    data: { labels: allLabels, datasets },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: { duration: 500 },
-      plugins: {
-        legend: {
-          position: 'top',
-          labels: { color: '#a8c2d8', font: { size: 10 }, boxWidth: 12, padding: 8 },
-        },
-        tooltip: {
-          backgroundColor: '#0d2035',
-          borderColor: col,
-          borderWidth: 1,
-          titleColor: '#e8f0f8',
-          bodyColor: '#a8c2d8',
-          callbacks: {
-            label: (ctx: any) => {
-              if (ctx.raw === null) return null;
-              const s = ctx.raw as number;
-              return ` ${secToStr(s)}`;
-            },
-            afterLabel: (ctx: any) => {
-              const i = ctx.dataIndex;
-              if (i < ep.pts.length) return ` ${ep.pts[i]} pts`;
-              return null;
-            },
-            footer: (ctxArr: any[]) => {
-              const i = ctxArr[0]?.dataIndex;
-              if (i !== undefined && i < ep.comp.length && ep.comp[i]) {
-                return `${ep.comp[i]}${ep.lieu[i] ? ' · ' + ep.lieu[i] : ''}`;
-              }
-              return '';
-            },
+  return (
+    <VictoryChart
+      width={chartWidth}
+      height={200}
+      padding={{ top: 20, bottom: 50, left: 55, right: 20 }}
+      // Y inversé : temps plus bas = meilleur = en haut
+      domain={{ y: [maxY + pad, minY - pad] }}
+    >
+      <VictoryAxis
+        tickFormat={(i: number) => allLabels[Math.round(i)] ?? ''}
+        style={{ ...axisStyle, tickLabels: { fill: '#6a8ba5', fontSize: 9, angle: -30 } }}
+      />
+      <VictoryAxis
+        dependentAxis
+        tickFormat={(v: number) => secToStr(v)}
+        style={axisStyle}
+      />
+      <VictoryLine
+        data={realData}
+        style={{ data: { stroke: col, strokeWidth: 2.5 } }}
+        interpolation="catmullRom"
+      />
+      {ep.proj.length > 0 && (
+        <VictoryLine
+          data={projData}
+          style={{ data: { stroke: col + '80', strokeWidth: 2, strokeDasharray: [8, 4] as any } }}
+          interpolation="catmullRom"
+        />
+      )}
+      <VictoryScatter
+        data={realData}
+        size={6}
+        style={{
+          data: {
+            fill:        ({ datum }: any) =>
+              datum.comp === '[INT]' ? '#ff6b6b' : datum.comp === '[NAT]' ? '#ffa748' : col,
+            stroke:      '#0d2035',
+            strokeWidth: 1.5,
           },
-        },
-      },
-      scales: {
-        x: {
-          ticks: { color: '#6a8ba5', font: { size: 9 }, maxRotation: 30 },
-          grid: { color: 'rgba(26,52,84,0.6)' },
-        },
-        y: {
-          ticks: {
-            color: '#6a8ba5',
-            font: { size: 10 },
-            callback: (v: number) => secToStr(v),
-          },
-          grid: { color: 'rgba(26,52,84,0.6)' },
-          reverse: true,   // temps plus bas = meilleur = en haut
-        },
-      },
-    },
-  };
+        }}
+      />
+    </VictoryChart>
+  );
 }
 
-// ─── Config Chart.js : Fréquence ─────────────────────────────────────────────
-function buildFreqConfig(freq: FreqRow[]) {
-  return {
-    type: 'bar',
-    data: {
-      labels: freq.map(d => d.Annee),
-      datasets: [{
-        label: 'Performances',
-        data: freq.map(d => d.nb),
-        backgroundColor: freq.map((_, i) =>
-          i === freq.length - 1 ? 'rgba(0,201,167,0.6)' : 'rgba(29,111,164,0.45)'
-        ),
-        borderColor: freq.map((_, i) =>
-          i === freq.length - 1 ? '#00c9a7' : '#1d6fa4'
-        ),
-        borderWidth: 1,
-        borderRadius: 4,
-      }],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: { duration: 500 },
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: '#0d2035',
-          borderColor: '#1a3454',
-          borderWidth: 1,
-          titleColor: '#e8f0f8',
-          bodyColor: '#a8c2d8',
-        },
-      },
-      scales: {
-        x: {
-          ticks: { color: '#6a8ba5', font: { size: 10 } },
-          grid: { color: 'rgba(26,52,84,0.6)' },
-        },
-        y: {
-          ticks: { color: '#6a8ba5', font: { size: 10 } },
-          grid: { color: 'rgba(26,52,84,0.6)' },
-          beginAtZero: true,
-        },
-      },
-    },
-  };
+// ─── Graphique 3 : Fréquence d'activité (Bar) ────────────────────────────────
+function FreqChart({ freq }: { freq: FreqRow[] }) {
+  const { width } = useWindowDimensions();
+  const chartWidth = width - 48;
+
+  return (
+    <VictoryChart
+      width={chartWidth}
+      height={160}
+      padding={{ top: 20, bottom: 40, left: 45, right: 20 }}
+      domainPadding={{ x: 15 }}
+    >
+      <VictoryAxis style={axisStyle} />
+      <VictoryAxis dependentAxis style={axisStyle} />
+      <VictoryBar
+        data={freq.map((d, i) => ({
+          x: String(d.Annee),
+          y: d.nb,
+          isLast: i === freq.length - 1,
+        }))}
+        style={{
+          data: {
+            fill:        ({ datum }: any) => datum.isLast ? 'rgba(0,201,167,0.6)' : 'rgba(29,111,164,0.45)',
+            stroke:      ({ datum }: any) => datum.isLast ? '#00c9a7' : '#1d6fa4',
+            strokeWidth: 1,
+          },
+        }}
+        cornerRadius={{ top: 4 }}
+      />
+    </VictoryChart>
+  );
 }
 
 // ─── Composant principal ──────────────────────────────────────────────────────
 export default function AthleteCharts({ evo, evo_temps, freq }: Props) {
-  const [bassin, setBassin]       = useState<'25m' | '50m'>('50m');
+  const [bassin, setBassin]         = useState<'25m' | '50m'>('50m');
   const [selectedEp, setSelectedEp] = useState<string>('');
 
   const epKeys50 = Object.keys(evo_temps || {}).filter(k => k.includes('· 50m'));
   const epKeys25 = Object.keys(evo_temps || {}).filter(k => k.includes('· 25m'));
   const epKeys   = bassin === '50m' ? epKeys50 : epKeys25;
 
-  // Bassin auto : 50m si dispo, sinon 25m
   useEffect(() => {
     if (epKeys50.length === 0 && epKeys25.length > 0) setBassin('25m');
   }, [evo_temps]);
 
-  // Épreuve sélectionnée par défaut
   useEffect(() => {
     if (epKeys.length > 0 && (!selectedEp || !epKeys.includes(selectedEp))) {
       setSelectedEp(epKeys[0]);
@@ -371,7 +266,7 @@ export default function AthleteCharts({ evo, evo_temps, freq }: Props) {
           title="Évolution des points"
           sub={`${evo!.length} années · barres = nb perfs · ligne = pts moyens`}
         >
-          <ChartWebView config={buildEvoConfig(evo!)} height={220} />
+          <EvoChart evo={evo!} />
 
           <View style={styles.statsRow}>
             <StatBox
@@ -429,9 +324,9 @@ export default function AthleteCharts({ evo, evo_temps, freq }: Props) {
           {/* Sélecteur épreuve */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.epRow}>
             {epKeys.map(k => {
-              const ep = evo_temps![k];
+              const ep  = evo_temps![k];
               const col = ep.color || NC[ep.nage] || '#1d6fa4';
-              const label = k.replace(` · ${bassin}`, '');
+              const label  = k.replace(` · ${bassin}`, '');
               const active = k === selectedEp;
               return (
                 <Pressable
@@ -440,7 +335,7 @@ export default function AthleteCharts({ evo, evo_temps, freq }: Props) {
                   style={[
                     styles.epTab,
                     {
-                      borderColor: active ? col : COLORS.border,
+                      borderColor:     active ? col : COLORS.border,
                       backgroundColor: active ? col + '22' : COLORS.surface,
                     },
                   ]}
@@ -456,11 +351,7 @@ export default function AthleteCharts({ evo, evo_temps, freq }: Props) {
           {/* Graphique temps */}
           {currentEp ? (
             <>
-              <ChartWebView
-                key={selectedEp}
-                config={buildTempsConfig(currentEp)}
-                height={200}
-              />
+              <TempsChart ep={currentEp} />
 
               {/* Stats rapides */}
               <View style={styles.statsRow}>
@@ -530,11 +421,11 @@ export default function AthleteCharts({ evo, evo_temps, freq }: Props) {
           sub="Nombre de performances par année"
           defaultOpen={false}
         >
-          <ChartWebView config={buildFreqConfig(freq!)} height={160} />
+          <FreqChart freq={freq!} />
           <View style={styles.statsRow}>
-            <StatBox label="TOTAL"        value={freq!.reduce((s, d) => s + d.nb, 0)} />
-            <StatBox label="RECORD"       value={Math.max(...freq!.map(d => d.nb))} color={COLORS.accent} />
-            <StatBox label="CETTE ANNÉE"  value={freq![freq!.length - 1]?.nb} color={COLORS.warning} />
+            <StatBox label="TOTAL"       value={freq!.reduce((s, d) => s + d.nb, 0)} />
+            <StatBox label="RECORD"      value={Math.max(...freq!.map(d => d.nb))} color={COLORS.accent} />
+            <StatBox label="CETTE ANNÉE" value={freq![freq!.length - 1]?.nb} color={COLORS.warning} />
           </View>
         </ChartSection>
       )}
@@ -563,12 +454,11 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
   },
   sectionAccent: { width: 3, height: 18, backgroundColor: COLORS.accent, borderRadius: 2 },
-  sectionTitle: { color: COLORS.text, fontSize: 14, fontWeight: '800' },
-  sectionSub: { color: COLORS.muted, fontSize: 11, marginTop: 1 },
-  chevron: { color: COLORS.muted, fontSize: 16 },
-  sectionBody: { padding: 12, gap: 10 },
+  sectionTitle:  { color: COLORS.text, fontSize: 14, fontWeight: '800' },
+  sectionSub:    { color: COLORS.muted, fontSize: 11, marginTop: 1 },
+  chevron:       { color: COLORS.muted, fontSize: 16 },
+  sectionBody:   { padding: 12, gap: 10 },
 
-  // Bassin
   bassinRow: { flexDirection: 'row', gap: 6 },
   bassinBtn: {
     paddingHorizontal: 14,
@@ -578,21 +468,14 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     backgroundColor: COLORS.surface,
   },
-  bassinBtnOn: { backgroundColor: COLORS.accentDim, borderColor: COLORS.accentGlow },
-  bassinBtnText: { color: COLORS.muted, fontSize: 13, fontWeight: '800' },
+  bassinBtnOn:     { backgroundColor: COLORS.accentDim, borderColor: COLORS.accentGlow },
+  bassinBtnText:   { color: COLORS.muted, fontSize: 13, fontWeight: '800' },
   bassinBtnTextOn: { color: COLORS.accent },
 
-  // Épreuve tabs
-  epRow: { gap: 6, paddingRight: 4, paddingVertical: 2 },
-  epTab: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  epTabText: { fontSize: 12, fontWeight: '800' },
+  epRow:    { gap: 6, paddingRight: 4, paddingVertical: 2 },
+  epTab:    { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1 },
+  epTabText:{ fontSize: 12, fontWeight: '800' },
 
-  // Stats
   statsRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   statBox: {
     flex: 1,
@@ -614,7 +497,6 @@ const styles = StyleSheet.create({
   },
   statValue: { color: COLORS.text, fontSize: 14, fontWeight: '900' },
 
-  // Best comp
   bestCompBox: {
     backgroundColor: COLORS.surface,
     borderRadius: 8,
@@ -624,11 +506,10 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   bestCompLabel: { color: COLORS.muted, fontSize: 10, fontWeight: '700' },
-  bestCompVal: { color: COLORS.textMid, fontSize: 12, fontWeight: '700' },
+  bestCompVal:   { color: COLORS.textMid, fontSize: 12, fontWeight: '700' },
 
-  // Legend
-  legendRow: { flexDirection: 'row', gap: 12, paddingLeft: 2 },
+  legendRow:  { flexDirection: 'row', gap: 12, paddingLeft: 2 },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  legendDot: { width: 8, height: 8, borderRadius: 4 },
+  legendDot:  { width: 8, height: 8, borderRadius: 4 },
   legendText: { color: COLORS.muted, fontSize: 10 },
 });
