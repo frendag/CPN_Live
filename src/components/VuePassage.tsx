@@ -18,6 +18,12 @@ const STATUT_DOT: Record<PassageStatut, string> = {
   a_venir:  COLORS.subtle,
 };
 
+const STATUT_LABEL: Record<PassageStatut, string> = {
+  nage:     '✓ Nagé',
+  en_cours: '⏱ En cours',
+  a_venir:  '⏳ À venir',
+};
+
 function tendanceMeta(tendance?: string | null): TrendMeta {
   switch (tendance) {
     case 'mieux':      return { tone: 'better',  label: 'Mieux' };
@@ -121,7 +127,12 @@ function ReunionCard({ group, index }: { group: ReunionGroup; index: number }) {
                     <View style={[styles.dot, { backgroundColor: dotColor }]} />
                     <Text style={styles.athleteName} numberOfLines={1}>{p.athlete_nom}</Text>
                   </View>
-                  <Text style={styles.heureText}>{p.heure_depart || '—'}{p.plot ? ` · Plot ${p.plot}` : ''}</Text>
+                  <View style={styles.heureRow}>
+                    <View style={[styles.statutBadge, { backgroundColor: dotColor + '22', borderColor: dotColor + '66' }]}>
+                      <Text style={[styles.statutBadgeText, { color: dotColor }]}>{STATUT_LABEL[p.statut]}</Text>
+                    </View>
+                    <Text style={styles.heureText}>{p.heure_depart || '—'}{p.plot ? ` · Plot ${p.plot}` : ''}</Text>
+                  </View>
                 </View>
                 {hasResult && (
                   <View style={styles.timeBlock}>
@@ -245,7 +256,10 @@ const styles = StyleSheet.create({
   nameRow:    { flexDirection: 'row', alignItems: 'center', gap: 6 },
   dot:        { width: 8, height: 8, borderRadius: 4 },
   athleteName:{ color: COLORS.text, fontSize: 14, fontWeight: '800', flex: 1 },
-  heureText:  { color: COLORS.muted, fontSize: 11, marginLeft: 14 },
+  heureRow:        { flexDirection: 'row', alignItems: 'center', gap: 6, marginLeft: 14, marginTop: 2 },
+  statutBadge:     { borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1 },
+  statutBadgeText: { fontSize: 10, fontWeight: '700' },
+  heureText:       { color: COLORS.muted, fontSize: 11 },
   timeBlock:  { alignItems: 'flex-end' },
   timeVal:    { color: COLORS.text, fontSize: 16, fontWeight: '900' },
   timeValQualif: { color: '#ffd166' },
