@@ -10,6 +10,7 @@ import { Avatar, KpiCard, LiveBadge, SectionCard, SectionHeader, StatusPill } fr
 import AthleteHub from '../components/AthleteHub';
 import BottomSheet from '../components/BottomSheet';
 import EmptyState from '../components/EmptyState';
+import VuePassage from '../components/VuePassage';
 import VueProgramme from '../components/VueProgramme';
 import VueResultats from '../components/VueResultats';
 import NotificationPanel from '../components/NotificationPanel';
@@ -145,7 +146,7 @@ interface HomeScreenProps {
 export default function HomeScreen({ initialSection = 'competition' }: HomeScreenProps) {
   const {
     competitions, selectedCompetition, selectedCompetitionId,
-    programme, resultats, loadingList, loadingDetail, error,
+    programme, resultats, passage, loadingList, loadingDetail, error,
     lastRefresh, loadCompetitions, loadCompetition, refreshResultats,
   } = useCompetV2();
 
@@ -201,7 +202,8 @@ export default function HomeScreen({ initialSection = 'competition' }: HomeScree
   const competitionCounts   = useMemo(() => ({
     programme: programme?.reunions.reduce((s, r) => s + r.lignes.length, 0) || 0,
     resultats: resultats?.reunions.reduce((s, r) => s + r.lignes.length, 0) || 0,
-  }), [programme, resultats]);
+    passage:   passage?.passages.length || 0,
+  }), [programme, resultats, passage]);
 
   const activeFiltersCount = [nageFilter, typeFilter, reunionFilter !== '' ? '1' : '', searchAthlete].filter(Boolean).length;
 
@@ -386,6 +388,12 @@ export default function HomeScreen({ initialSection = 'competition' }: HomeScree
                     count={competitionCounts.resultats}
                     onPress={() => setTab('resultats')}
                   />
+                  <TabBtn
+                    label="🏁 Passage"
+                    active={tab === 'passage'}
+                    count={competitionCounts.passage}
+                    onPress={() => setTab('passage')}
+                  />
                 </View>
 
                 {/* Filter trigger */}
@@ -415,8 +423,10 @@ export default function HomeScreen({ initialSection = 'competition' }: HomeScree
                 <Animated.View style={{ opacity: tabOpacity, transform: [{ translateX: tabSlide }] }}>
                   {tab === 'programme' ? (
                     <VueProgramme reunions={programmeReunions} reunionFilter={reunionFilter} />
-                  ) : (
+                  ) : tab === 'resultats' ? (
                     <VueResultats rows={resultRows} reunionsCount={displayedReunions.length} />
+                  ) : (
+                    <VuePassage passages={passage?.passages || []} />
                   )}
                 </Animated.View>
 

@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { buildApiUrl, errorMessage, fetchJson } from '../utils/api';
-import { CompetitionSummary, CompetitionsListResponse, ProgrammeResponse, ResultatsResponse } from '../utils/types';
+import { CompetitionSummary, CompetitionsListResponse, PassageResponse, ProgrammeResponse, ResultatsResponse } from '../utils/types';
 
 export function useCompetV2() {
   const [competitions, setCompetitions] = useState<CompetitionSummary[]>([]);
   const [selectedCompetitionId, setSelectedCompetitionId] = useState<number | null>(null);
   const [programme, setProgramme] = useState<ProgrammeResponse | null>(null);
   const [resultats, setResultats] = useState<ResultatsResponse | null>(null);
+  const [passage, setPassage] = useState<PassageResponse | null>(null);
   const [loadingList, setLoadingList] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,6 +32,7 @@ export function useCompetV2() {
     if (!keepOldData) {
       setProgramme(null);
       setResultats(null);
+      setPassage(null);
     }
     try {
       const [prog, res] = await Promise.all([
@@ -39,6 +41,8 @@ export function useCompetV2() {
       ]);
       setProgramme(prog);
       setResultats(res);
+      fetchJson<PassageResponse>(buildApiUrl(`/api/compet_v2/passage?competition_id=${competitionId}`))
+        .then(setPassage).catch(() => setPassage(null));
       setLastRefresh(new Date());
       setError(null);
     } catch (error: unknown) {
@@ -53,10 +57,12 @@ export function useCompetV2() {
     try {
       const res = await fetchJson<ResultatsResponse>(buildApiUrl(`/api/compet_v2/resultats?competition_id=${selectedCompetitionId}`));
       setResultats(res);
+      fetchJson<PassageResponse>(buildApiUrl(`/api/compet_v2/passage?competition_id=${selectedCompetitionId}`))
+        .then(setPassage).catch(() => setPassage(null));
       setLastRefresh(new Date());
       setError(null);
     } catch (error: unknown) {
-      setError(errorMessage(error, 'Impossible d’actualiser les résultats.'));
+      setError(errorMessage(error, "Impossible d’actualiser les résultats."));
     }
   }, [selectedCompetitionId]);
 
@@ -85,6 +91,7 @@ export function useCompetV2() {
     selectedCompetitionId,
     programme,
     resultats,
+    passage,
     loadingList,
     loadingDetail,
     error,

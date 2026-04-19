@@ -1,6 +1,6 @@
 export type AppSection = 'competition' | 'athlete';
 export type CompetitionStatus = 'en_cours' | 'a_venir' | 'passee';
-export type CompetitionTab = 'programme' | 'resultats';
+export type CompetitionTab = 'programme' | 'resultats' | 'passage';
 export type ReunionFilter = number | '';
 export type NageFilter = '' | 'NL' | 'Dos' | 'Bra' | 'Pap' | '4 N';
 export type TypeFilter = '' | 'Séries' | 'Finale';
@@ -105,6 +105,34 @@ export interface ProgrammeResponse {
 export interface ResultatsResponse {
   competition: CompetitionMeta;
   reunions: Reunion<ResultRow>[];
+  error?: string;
+}
+
+export type PassageStatut = 'nage' | 'en_cours' | 'a_venir';
+
+export interface PassageRow {
+  athlete_nom: string;
+  annee_naiss?: number | string | null;
+  sexe?: string | null;
+  epreuve_label: string;
+  epreuve_norm?: string | null;
+  type_serie?: string | null;
+  heure_depart?: string | null;
+  plot?: number | string | null;
+  serie_num?: number | string | null;
+  reunion_num: number;
+  reunion_label?: string | null;
+  reunion_moment?: string | null;
+  temps_ref?: string | null;
+  temps_result?: string | null;
+  points?: string | null;
+  rang_general?: string | null;
+  statut: PassageStatut;
+}
+
+export interface PassageResponse {
+  competition: CompetitionMeta;
+  passages: PassageRow[];
   error?: string;
 }
 
