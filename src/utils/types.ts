@@ -127,6 +127,13 @@ export interface PassageRow {
   temps_result?: string | null;
   points?: string | null;
   rang_general?: string | null;
+  rang_pos?: number | null;
+  rang_total?: number | null;
+  tendance?: string | null;
+  niveau_atteint?: string | null;
+  niveau_superieur?: string | null;
+  next_temps?: string | null;
+  next_delta_pct?: number | null;
   statut: PassageStatut;
 }
 
